@@ -10,9 +10,13 @@ resources:
 - ../manager
 - ../webhook
 - ../certmanager
+- metrics_service.yaml
 
 patches:
 - path: manager_webhook_patch.yaml
+  target:
+    kind: Deployment
+- path: manager_metrics_patch.yaml
   target:
     kind: Deployment
 
@@ -99,6 +103,42 @@ replacements:
       group: cert-manager.io
       version: v1
       name: serving-cert
+    fieldPaths:
+    - .spec.dnsNames.0
+    - .spec.dnsNames.1
+    options:
+      delimiter: '.'
+      index: 1
+
+- source:
+    kind: Service
+    version: v1
+    name: controller-manager-metrics-service
+    fieldPath: .metadata.name
+  targets:
+  - select:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: metrics-certs
+    fieldPaths:
+    - .spec.dnsNames.0
+    - .spec.dnsNames.1
+    options:
+      delimiter: '.'
+      index: 0
+
+- source:
+    kind: Service
+    version: v1
+    name: controller-manager-metrics-service
+    fieldPath: .metadata.namespace
+  targets:
+  - select:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: metrics-certs
     fieldPaths:
     - .spec.dnsNames.0
     - .spec.dnsNames.1

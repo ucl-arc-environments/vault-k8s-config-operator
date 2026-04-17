@@ -437,6 +437,25 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: vault-k8s-config-operator
+    control-plane: controller-manager
+  name: vault-k8s-config-operator-controller-manager-metrics-service
+  namespace: vault-k8s-config-operator-system
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: vault-k8s-config-operator
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vault-k8s-config-operator
   name: vault-k8s-config-operator-webhook-service
   namespace: vault-k8s-config-operator-system
 spec:
@@ -473,6 +492,7 @@ spec:
     spec:
       containers:
       - args:
+        - --metrics-bind-address=:8443
         - --leader-elect
         - --health-probe-bind-address=:8081
         command:
@@ -488,6 +508,9 @@ spec:
         ports:
         - containerPort: 9443
           name: webhook-server
+          protocol: TCP
+        - containerPort: 8443
+          name: https
           protocol: TCP
         readinessProbe:
           httpGet:
@@ -533,8 +556,8 @@ metadata:
   namespace: vault-k8s-config-operator-system
 spec:
   dnsNames:
-  - SERVICE_NAME.SERVICE_NAMESPACE.svc
-  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  - vault-k8s-config-operator-controller-manager-metrics-service.vault-k8s-config-operator-system.svc
+  - vault-k8s-config-operator-controller-manager-metrics-service.vault-k8s-config-operator-system.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: vault-k8s-config-operator-selfsigned-issuer

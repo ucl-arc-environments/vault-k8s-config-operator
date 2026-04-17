@@ -37,6 +37,12 @@ spec:
       {{- end }}
       containers:
       - args:
+        {{- if .Values.metrics.enable }}
+        - --metrics-bind-address=:{{ .Values.metrics.port }}
+        {{- else }}
+        # Bind to :0 to disable the controller-runtime managed metrics server
+        - --metrics-bind-address=0
+        {{- end }}
         - --health-probe-bind-address=:8081
         {{- range .Values.manager.args }}
         - {{ . }}
@@ -55,6 +61,9 @@ spec:
         ports:
         - containerPort: {{ .Values.webhook.port }}
           name: webhook-server
+          protocol: TCP
+        - containerPort: 8443
+          name: https
           protocol: TCP
         readinessProbe:
           httpGet:
