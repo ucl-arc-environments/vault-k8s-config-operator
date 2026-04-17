@@ -90,7 +90,7 @@ crd:
 ## Enable to expose /metrics endpoint with RBAC protection.
 ##
 metrics:
-  enable: false
+  enable: true
   # Metrics server port
   port: 8443
 
@@ -112,3 +112,4 @@ webhook:
 ##
 prometheus:
   enable: false
+

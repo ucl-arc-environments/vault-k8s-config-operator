@@ -41,7 +41,7 @@ const namespace = "vault-k8s-config-operator-system"
 const serviceAccountName = "vault-k8s-config-operator-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "vault-k8s-config-operator-metrics-service"
+const metricsServiceName = "vault-k8s-config-operator-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "vault-k8s-config-operator-metrics-binding"

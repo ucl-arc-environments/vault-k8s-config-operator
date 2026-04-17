@@ -6,7 +6,7 @@ metadata:
     control-plane: controller-manager
     app.kubernetes.io/name: vault-k8s-config-operator
     app.kubernetes.io/managed-by: kustomize
-  name: metrics-monitor
+  name: controller-manager-metrics-monitor
   namespace: system
 spec:
   endpoints:
