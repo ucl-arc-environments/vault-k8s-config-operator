@@ -1,5 +1,5 @@
 ---
-name: Helm Chart Testing
+name: Helm Chart and Manifests Check
 
 on:
   push:
@@ -19,7 +19,7 @@ concurrency:
     ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
-  helm-chart-version-check:
+  helm-chart-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,3 +39,28 @@ jobs:
 
       - name: Verify Helm chart is up to date
         run: make helm-chart-check
+
+  manifests-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version: 1.25
+
+      - name: Verify manifests and generated code are up to date
+        run: |
+          set -euo pipefail
+          make manifests generate
+
+          if ! git diff --quiet -- .; then
+            echo "Generated files are out of date."
+            echo "Run: make manifests generate helm-chart"
+            echo "Then commit the resulting changes."
+            git --no-pager diff -- . | sed -n '1,300p'
+            exit 1
+          fi
