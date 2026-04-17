@@ -351,22 +351,11 @@ func helmOverrideArgs(imageRef string) (string, error) {
 		return "", err
 	}
 
-	parts := strings.Split(withoutTag, "/")
-	if len(parts) < 3 {
-		return "", fmt.Errorf("image %q must include registry/repository/name to map into Helm values", imageRef)
-	}
-
-	registry := parts[0]
-	repository := strings.Join(parts[1:len(parts)-1], "/")
-	name := parts[len(parts)-1]
-
 	// Set manager.image.* values consumed by the Helm chart templates.
 	// Enable metrics, certManager, and webhook so the e2e tests can exercise
 	// all endpoints; these are intentionally off by default in values.yaml.
 	return strings.Join([]string{
-		fmt.Sprintf("--set manager.image.registry=%s", registry),
-		fmt.Sprintf("--set manager.image.repository=%s", repository),
-		fmt.Sprintf("--set manager.image.name=%s", name),
+		fmt.Sprintf("--set manager.image.repository=%s", withoutTag),
 		fmt.Sprintf("--set manager.image.tag=%s", tag),
 		"--set manager.image.pullPolicy=IfNotPresent",
 		"--set metrics.enable=true",
