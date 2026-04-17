@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- environments.arc.ucl_v1_vaultk8sconfig.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
