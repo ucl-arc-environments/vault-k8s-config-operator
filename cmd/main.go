@@ -55,12 +55,19 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var metricsAddr string
+	var metricsCertPath string
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(
 		&metricsAddr,
 		"metrics-bind-address",
 		"0",
 		"The address the metrics endpoint binds to. Use :8443 to enable serving metrics.",
+	)
+	flag.StringVar(
+		&metricsCertPath,
+		"metrics-cert-path",
+		"",
+		"Directory containing TLS certs for the metrics endpoint. If empty, controller-runtime uses its default cert directory.",
 	)
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -77,6 +84,7 @@ func main() {
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress:   metricsAddr,
+			CertDir:       metricsCertPath,
 			SecureServing: true,
 		},
 		HealthProbeBindAddress: probeAddr,
