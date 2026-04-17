@@ -55,6 +55,8 @@ var _ = Describe("Manager", Ordered, func() {
 	BeforeAll(func() {
 		helmValues, helmValuesErr := helmOverrideArgs(managerImage)
 		Expect(helmValuesErr).NotTo(HaveOccurred(), "Failed to derive Helm overrides")
+		helmKubeconfig := os.Getenv("KUBECONFIG")
+		Expect(helmKubeconfig).NotTo(BeEmpty(), "KUBECONFIG must point to the e2e cluster")
 
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
@@ -72,6 +74,7 @@ var _ = Describe("Manager", Ordered, func() {
 			"make",
 			"install",
 			fmt.Sprintf("IMG=%s", managerImage),
+			fmt.Sprintf("HELM_KUBECONFIG=%s", helmKubeconfig),
 			fmt.Sprintf("HELM_EXTRA_ARGS=%s", helmValues),
 		)
 		_, err = utils.Run(cmd)
@@ -82,6 +85,7 @@ var _ = Describe("Manager", Ordered, func() {
 			"make",
 			"deploy",
 			fmt.Sprintf("IMG=%s", managerImage),
+			fmt.Sprintf("HELM_KUBECONFIG=%s", helmKubeconfig),
 			fmt.Sprintf("HELM_EXTRA_ARGS=%s", helmValues),
 		)
 		_, err = utils.Run(cmd)

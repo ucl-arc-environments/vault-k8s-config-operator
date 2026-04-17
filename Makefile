@@ -93,7 +93,7 @@ setup-test-e2e: ## Set up a K3D cluster for e2e tests if it does not exist
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using K3D.
 	@set +e; \
-	K3D=$(K3D) K3D_CLUSTER=$(K3D_CLUSTER) KUBECONFIG=$(E2E_KUBECONFIG) HELM_KUBE_CONTEXT=$(E2E_KUBE_CONTEXT) go test -tags=e2e ./test/e2e/ -v -ginkgo.v; \
+	K3D=$(K3D) K3D_CLUSTER=$(K3D_CLUSTER) KUBECONFIG=$(E2E_KUBECONFIG) HELM_KUBECONFIG=$(E2E_KUBECONFIG) HELM_KUBE_CONTEXT=$(E2E_KUBE_CONTEXT) go test -tags=e2e ./test/e2e/ -v -ginkgo.v; \
 	exit_code=$$?; \
 	$(MAKE) cleanup-test-e2e; \
 	exit $$exit_code
