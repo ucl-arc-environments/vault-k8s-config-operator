@@ -198,6 +198,7 @@ helm-chart: manifests generate ## Generate or refresh the Helm chart (requires k
 		exit 1; \
 	}
 	kubebuilder edit --plugins=helm/v2-alpha
+	rm -f .github/workflows/test-chart.yml
 
 .PHONY: helm-deploy
 helm-deploy: ## Install/upgrade the operator with Helm from HELM_CHART_DIR.
