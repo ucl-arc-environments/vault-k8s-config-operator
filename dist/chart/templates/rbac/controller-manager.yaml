@@ -6,5 +6,5 @@ metadata:
     app.kubernetes.io/name: {{ include "vault-k8s-config-operator.name" . }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-  name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+  name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "manager" "context" $) }}
   namespace: {{ .Release.Namespace }}

@@ -11,8 +11,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   dnsNames:
-  - {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "controller-manager-metrics-service" "context" $) }}.{{ .Release.Namespace }}.svc
-  - {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "controller-manager-metrics-service" "context" $) }}.{{ .Release.Namespace }}.svc.cluster.local
+  - {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "metrics-service" "context" $) }}.{{ .Release.Namespace }}.svc
+  - {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "metrics-service" "context" $) }}.{{ .Release.Namespace }}.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "selfsigned-issuer" "context" $) }}

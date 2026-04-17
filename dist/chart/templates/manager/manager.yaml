@@ -7,7 +7,7 @@ metadata:
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     control-plane: controller-manager
-  name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+  name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "manager" "context" $) }}
   namespace: {{ .Release.Namespace }}
 spec:
   replicas: {{ .Values.manager.replicas }}
@@ -95,7 +95,7 @@ spec:
         {{- else }}
         {}
         {{- end }}
-      serviceAccountName: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+      serviceAccountName: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "manager" "context" $) }}
       terminationGracePeriodSeconds: 10
       volumes:
       {{- if .Values.certManager.enable }}

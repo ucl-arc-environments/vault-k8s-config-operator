@@ -13,5 +13,5 @@ roleRef:
   name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "manager-role" "context" $) }}
 subjects:
 - kind: ServiceAccount
-  name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+  name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "manager" "context" $) }}
   namespace: {{ .Release.Namespace }}

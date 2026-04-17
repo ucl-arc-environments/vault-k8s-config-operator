@@ -38,10 +38,10 @@ import (
 const namespace = "vault-k8s-config-operator-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "vault-k8s-config-operator-controller-manager"
+const serviceAccountName = "vault-k8s-config-operator-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "vault-k8s-config-operator-controller-manager-metrics-service"
+const metricsServiceName = "vault-k8s-config-operator-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "vault-k8s-config-operator-metrics-binding"
@@ -195,7 +195,7 @@ var _ = Describe("Manager", Ordered, func() {
 				podNames := utils.GetNonEmptyLines(podOutput)
 				g.Expect(podNames).To(HaveLen(1), "expected 1 controller pod running")
 				controllerPodName = podNames[0]
-				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
+				g.Expect(controllerPodName).To(ContainSubstring("vault-k8s-config-operator"))
 
 				// Validate the pod's status
 				cmd = exec.Command("kubectl", "get",

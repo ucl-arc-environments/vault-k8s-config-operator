@@ -220,7 +220,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: vault-k8s-config-operator
-  name: vault-k8s-config-operator-controller-manager
+  name: vault-k8s-config-operator-manager
   namespace: vault-k8s-config-operator-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -412,7 +412,7 @@ roleRef:
   name: vault-k8s-config-operator-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: vault-k8s-config-operator-controller-manager
+  name: vault-k8s-config-operator-manager
   namespace: vault-k8s-config-operator-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -428,7 +428,7 @@ roleRef:
   name: vault-k8s-config-operator-manager-role
 subjects:
 - kind: ServiceAccount
-  name: vault-k8s-config-operator-controller-manager
+  name: vault-k8s-config-operator-manager
   namespace: vault-k8s-config-operator-system
 ---
 apiVersion: v1
@@ -438,7 +438,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: vault-k8s-config-operator
     control-plane: controller-manager
-  name: vault-k8s-config-operator-controller-manager-metrics-service
+  name: vault-k8s-config-operator-metrics-service
   namespace: vault-k8s-config-operator-system
 spec:
   ports:
@@ -474,7 +474,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: vault-k8s-config-operator
     control-plane: controller-manager
-  name: vault-k8s-config-operator-controller-manager
+  name: vault-k8s-config-operator-manager
   namespace: vault-k8s-config-operator-system
 spec:
   replicas: 1
@@ -539,7 +539,7 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-      serviceAccountName: vault-k8s-config-operator-controller-manager
+      serviceAccountName: vault-k8s-config-operator-manager
       terminationGracePeriodSeconds: 10
       volumes:
       - name: webhook-certs
@@ -556,8 +556,8 @@ metadata:
   namespace: vault-k8s-config-operator-system
 spec:
   dnsNames:
-  - vault-k8s-config-operator-controller-manager-metrics-service.vault-k8s-config-operator-system.svc
-  - vault-k8s-config-operator-controller-manager-metrics-service.vault-k8s-config-operator-system.svc.cluster.local
+  - vault-k8s-config-operator-metrics-service.vault-k8s-config-operator-system.svc
+  - vault-k8s-config-operator-metrics-service.vault-k8s-config-operator-system.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: vault-k8s-config-operator-selfsigned-issuer
