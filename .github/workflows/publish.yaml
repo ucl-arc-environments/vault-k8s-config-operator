@@ -1,0 +1,47 @@
+---
+name: Publish chart
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ucl-arc-environments/.github/actions/publish-image@328c7d728974ad4a6720537e6f3db85cc72daa31 # v0
+        with:
+          context: .
+          name: ${{ github.repository }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Login
+        run: >-
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{
+          env.REGISTRY }} --username ${{ github.actor }}
+          --password-stdin
+
+      - name: Package and push experimental channel chart
+        working-directory: ./dist/chart
+        run: |
+          helm dependency build
+          helm package .
+          helm push ./*.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts

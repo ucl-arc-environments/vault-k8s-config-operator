@@ -1,0 +1,19 @@
+---
+name: Linting
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  linting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version: 1.25
+      - uses: ucl-arc-environments/.github/actions/linting@b6851ba9af3a2ecaae632e6977d05bafb4327063 # v0
+        with:
+          pre-commit-config: ./.pre-commit-config.yaml

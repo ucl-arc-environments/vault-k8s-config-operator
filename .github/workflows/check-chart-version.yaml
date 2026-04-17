@@ -1,0 +1,41 @@
+---
+name: Helm Chart Testing
+
+on:
+  push:
+    branches:
+      - main
+      - renovate/**
+  pull_request:
+    types:
+      - opened
+      - ready_for_review
+      - reopened
+      - synchronize
+
+concurrency:
+  cancel-in-progress: true
+  group: >-
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  helm-chart-version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version: 1.25
+
+      - name: Install kubebuilder
+        run: |
+          curl -fsSL "https://go.kubebuilder.io/dl/latest/linux/amd64" | tar -xz -C /tmp
+          sudo mv /tmp/kubebuilder_* /usr/local/kubebuilder
+          echo "/usr/local/kubebuilder/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Helm chart is up to date
+        run: make helm-chart-check
