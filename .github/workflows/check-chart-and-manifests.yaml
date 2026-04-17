@@ -33,9 +33,9 @@ jobs:
 
       - name: Install kubebuilder
         run: |
-          curl -fsSL "https://go.kubebuilder.io/dl/latest/linux/amd64" | tar -xz -C /tmp
-          sudo mv /tmp/kubebuilder_* /usr/local/kubebuilder
-          echo "/usr/local/kubebuilder/bin" >> "$GITHUB_PATH"
+          curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)"
+          chmod +x kubebuilder && sudo mv kubebuilder /usr/local/bin/
+          echo "/usr/local/bin/kubebuilder" >> "$GITHUB_PATH"
 
       - name: Verify Helm chart is up to date
         run: make helm-chart-check
