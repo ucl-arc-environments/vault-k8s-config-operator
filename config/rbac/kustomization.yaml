@@ -16,4 +16,3 @@ resources:
 - vaultk8sconfig_admin_role.yaml
 - vaultk8sconfig_editor_role.yaml
 - vaultk8sconfig_viewer_role.yaml
-
