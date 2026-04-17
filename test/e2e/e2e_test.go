@@ -117,13 +117,31 @@ var _ = Describe("Manager", Ordered, func() {
 	AfterEach(func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
+			By("Fetching namespace pod status")
+			cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-o", "wide")
+			podsOutput, err := utils.Run(cmd)
+			if err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Namespace pods:\n%s", podsOutput)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get namespace pods: %s", err)
+			}
+
 			By("Fetching controller manager pod logs")
-			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+			cmd = exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 			controllerLogs, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
 			} else {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Controller logs: %s", err)
+			}
+
+			By("Fetching curl-metrics pod description")
+			cmd = exec.Command("kubectl", "describe", "pod", "curl-metrics", "-n", namespace)
+			curlDescribe, err := utils.Run(cmd)
+			if err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "curl-metrics description:\n%s", curlDescribe)
+			} else {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to describe curl-metrics pod: %s", err)
 			}
 
 			By("Fetching Kubernetes events")
@@ -221,14 +239,15 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyControllerPodReady, 3*time.Minute, time.Second).Should(Succeed())
 
 			By("verifying that the controller manager is serving the metrics server")
-			verifyMetricsServerStarted := func(g Gomega) {
-				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+			verifyMetricsEndpointsReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "endpointslices.discovery.k8s.io", "-n", namespace,
+					"-l", fmt.Sprintf("kubernetes.io/service-name=%s", metricsServiceName),
+					"-o", "jsonpath={range .items[*]}{range .endpoints[*]}{.addresses[*]}{end}{end}")
 				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("Serving metrics server"),
-					"Metrics server not yet started")
+				g.Expect(err).NotTo(HaveOccurred(), "Metrics endpoints should exist")
+				g.Expect(output).ShouldNot(BeEmpty(), "Metrics endpoints not yet ready")
 			}
-			Eventually(verifyMetricsServerStarted, 3*time.Minute, time.Second).Should(Succeed())
+			Eventually(verifyMetricsEndpointsReady, 3*time.Minute, time.Second).Should(Succeed())
 
 			By("waiting for the webhook service endpoints to be ready")
 			verifyWebhookEndpointsReady := func(g Gomega) {
@@ -297,6 +316,7 @@ var _ = Describe("Manager", Ordered, func() {
 					"-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(Equal("Failed"), "curl pod failed before completion")
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
 			}
 			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
