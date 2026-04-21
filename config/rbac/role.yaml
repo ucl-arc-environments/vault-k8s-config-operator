@@ -7,6 +7,14 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - namespaces
   - secrets
   - serviceaccounts
@@ -15,6 +23,12 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
 - apiGroups:
   - environments.arc.ucl
   resources:
