@@ -667,6 +667,14 @@ func (r *VaultK8sConfigReconciler) markReconciling(
 		return err
 	}
 
+	readyCondition := findCondition(latest.Status.Conditions, conditionTypeReady)
+	if readyCondition != nil &&
+		readyCondition.Status == metav1.ConditionTrue &&
+		readyCondition.Reason == conditionReasonReady &&
+		readyCondition.ObservedGeneration == latest.Generation {
+		return nil
+	}
+
 	base := latest.DeepCopy()
 	latest.Status.ObservedGeneration = latest.Generation
 	latest.Status.Conditions = setCondition(latest.Status.Conditions, metav1.Condition{
@@ -685,10 +693,17 @@ func (r *VaultK8sConfigReconciler) markReady(
 	ctx context.Context,
 	resource *v1.VaultK8sConfig,
 ) error {
+	log := logf.FromContext(ctx)
 	latest := &v1.VaultK8sConfig{}
 	if err := r.Get(ctx, types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}, latest); err != nil {
 		return err
 	}
+
+	readyCondition := findCondition(latest.Status.Conditions, conditionTypeReady)
+	shouldLogReady := readyCondition == nil ||
+		readyCondition.Status != metav1.ConditionTrue ||
+		readyCondition.ObservedGeneration != latest.Generation ||
+		readyCondition.Reason != conditionReasonReady
 
 	base := latest.DeepCopy()
 	latest.Status.ObservedGeneration = latest.Generation
@@ -701,7 +716,15 @@ func (r *VaultK8sConfigReconciler) markReady(
 		LastTransitionTime: metav1.Now(),
 	})
 
-	return r.Status().Patch(ctx, latest, client.MergeFrom(base))
+	if err := r.Status().Patch(ctx, latest, client.MergeFrom(base)); err != nil {
+		return err
+	}
+
+	if shouldLogReady {
+		log.Info("VaultK8sConfig became Ready", "name", latest.Name, "namespace", latest.Namespace)
+	}
+
+	return nil
 }
 
 func (r *VaultK8sConfigReconciler) markFailed(
@@ -743,6 +766,16 @@ func setCondition(conditions []metav1.Condition, next metav1.Condition) []metav1
 	}
 
 	return append(conditions, next)
+}
+
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
