@@ -532,36 +532,46 @@ func (r *VaultK8sConfigReconciler) markReconciling(
 	ctx context.Context,
 	resource *v1.VaultK8sConfig,
 ) error {
-	updated := resource.DeepCopy()
-	updated.Status.ObservedGeneration = updated.Generation
-	updated.Status.Conditions = setCondition(updated.Status.Conditions, metav1.Condition{
+	latest := &v1.VaultK8sConfig{}
+	if err := r.Get(ctx, types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}, latest); err != nil {
+		return err
+	}
+
+	base := latest.DeepCopy()
+	latest.Status.ObservedGeneration = latest.Generation
+	latest.Status.Conditions = setCondition(latest.Status.Conditions, metav1.Condition{
 		Type:               conditionTypeReady,
 		Status:             metav1.ConditionFalse,
 		Reason:             conditionReasonReconciling,
 		Message:            "Reconciling desired Vault Kubernetes secret engine configuration",
-		ObservedGeneration: updated.Generation,
+		ObservedGeneration: latest.Generation,
 		LastTransitionTime: metav1.Now(),
 	})
 
-	return r.Status().Patch(ctx, updated, client.MergeFrom(resource))
+	return r.Status().Patch(ctx, latest, client.MergeFrom(base))
 }
 
 func (r *VaultK8sConfigReconciler) markReady(
 	ctx context.Context,
 	resource *v1.VaultK8sConfig,
 ) error {
-	updated := resource.DeepCopy()
-	updated.Status.ObservedGeneration = updated.Generation
-	updated.Status.Conditions = setCondition(updated.Status.Conditions, metav1.Condition{
+	latest := &v1.VaultK8sConfig{}
+	if err := r.Get(ctx, types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}, latest); err != nil {
+		return err
+	}
+
+	base := latest.DeepCopy()
+	latest.Status.ObservedGeneration = latest.Generation
+	latest.Status.Conditions = setCondition(latest.Status.Conditions, metav1.Condition{
 		Type:               conditionTypeReady,
 		Status:             metav1.ConditionTrue,
 		Reason:             conditionReasonReady,
 		Message:            "Vault Kubernetes secret engine configuration applied",
-		ObservedGeneration: updated.Generation,
+		ObservedGeneration: latest.Generation,
 		LastTransitionTime: metav1.Now(),
 	})
 
-	return r.Status().Patch(ctx, updated, client.MergeFrom(resource))
+	return r.Status().Patch(ctx, latest, client.MergeFrom(base))
 }
 
 func (r *VaultK8sConfigReconciler) markFailed(
@@ -569,18 +579,23 @@ func (r *VaultK8sConfigReconciler) markFailed(
 	resource *v1.VaultK8sConfig,
 	reconcileErr error,
 ) error {
-	updated := resource.DeepCopy()
-	updated.Status.ObservedGeneration = updated.Generation
-	updated.Status.Conditions = setCondition(updated.Status.Conditions, metav1.Condition{
+	latest := &v1.VaultK8sConfig{}
+	if err := r.Get(ctx, types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}, latest); err != nil {
+		return err
+	}
+
+	base := latest.DeepCopy()
+	latest.Status.ObservedGeneration = latest.Generation
+	latest.Status.Conditions = setCondition(latest.Status.Conditions, metav1.Condition{
 		Type:               conditionTypeReady,
 		Status:             metav1.ConditionFalse,
 		Reason:             conditionReasonFailed,
 		Message:            reconcileErr.Error(),
-		ObservedGeneration: updated.Generation,
+		ObservedGeneration: latest.Generation,
 		LastTransitionTime: metav1.Now(),
 	})
 
-	return r.Status().Patch(ctx, updated, client.MergeFrom(resource))
+	return r.Status().Patch(ctx, latest, client.MergeFrom(base))
 }
 
 func setCondition(conditions []metav1.Condition, next metav1.Condition) []metav1.Condition {
