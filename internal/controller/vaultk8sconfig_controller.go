@@ -27,6 +27,7 @@ import (
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -241,6 +242,8 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 	ctx context.Context,
 	resource *v1.VaultK8sConfig,
 ) (VaultSecretEngineConfig, error) {
+	useManagedClusterCredentials := false
+
 	vaultToken, err := r.getSecretValue(
 		ctx,
 		resource.Namespace,
@@ -269,6 +272,7 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 			caCertKey = ref.CACertKey
 		}
 	} else {
+		useManagedClusterCredentials = true
 		// No reference provided: provision vault-auth resources in the CR's namespace.
 		provision := r.EnsureVaultAuthResources
 		if provision == nil {
@@ -282,12 +286,42 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 
 	jwt, err := r.getSecretValue(ctx, clusterSecretNamespace, clusterSecretName, jwtKey)
 	if err != nil {
-		return VaultSecretEngineConfig{}, fmt.Errorf("cluster credentials JWT reference is invalid: %w", err)
+		if useManagedClusterCredentials {
+			jwtFromTokenRequest, tokenErr := r.getServiceAccountToken(
+				ctx,
+				vaultAuthNamespace,
+				vaultAuthServiceAccountName,
+			)
+			if tokenErr == nil {
+				jwt = jwtFromTokenRequest
+			} else {
+				return VaultSecretEngineConfig{}, fmt.Errorf(
+					"cluster credentials JWT reference is invalid: %w; token request fallback failed: %v",
+					err,
+					tokenErr,
+				)
+			}
+		} else {
+			return VaultSecretEngineConfig{}, fmt.Errorf("cluster credentials JWT reference is invalid: %w", err)
+		}
 	}
 
 	caCert, err := r.getSecretValue(ctx, clusterSecretNamespace, clusterSecretName, caCertKey)
 	if err != nil {
-		return VaultSecretEngineConfig{}, fmt.Errorf("cluster credentials CA certificate reference is invalid: %w", err)
+		if useManagedClusterCredentials {
+			caFromConfigMap, caErr := r.getKubeRootCACert(ctx, vaultAuthNamespace)
+			if caErr == nil {
+				caCert = caFromConfigMap
+			} else {
+				return VaultSecretEngineConfig{}, fmt.Errorf(
+					"cluster credentials CA certificate reference is invalid: %w; kube-root-ca fallback failed: %v",
+					err,
+					caErr,
+				)
+			}
+		} else {
+			return VaultSecretEngineConfig{}, fmt.Errorf("cluster credentials CA certificate reference is invalid: %w", err)
+		}
 	}
 
 	return VaultSecretEngineConfig{
@@ -454,6 +488,47 @@ func (r *VaultK8sConfigReconciler) getSecretValue(
 	return string(value), nil
 }
 
+func (r *VaultK8sConfigReconciler) getServiceAccountToken(
+	ctx context.Context,
+	namespace string,
+	serviceAccountName string,
+) (string, error) {
+	tokenReq := &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			Audiences: []string{"https://kubernetes.default.svc"},
+		},
+	}
+
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: serviceAccountName, Namespace: namespace}}
+	if err := r.SubResource("token").Create(ctx, sa, tokenReq); err != nil {
+		return "", err
+	}
+
+	if tokenReq.Status.Token == "" {
+		return "", fmt.Errorf("empty token in token request response")
+	}
+
+	return tokenReq.Status.Token, nil
+}
+
+func (r *VaultK8sConfigReconciler) getKubeRootCACert(ctx context.Context, namespace string) (string, error) {
+	configMap := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: "kube-root-ca.crt", Namespace: namespace}, configMap); err != nil {
+		return "", err
+	}
+
+	caCert, found := configMap.Data["ca.crt"]
+	if !found {
+		return "", fmt.Errorf("configmap %s/%s does not contain key %q", namespace, "kube-root-ca.crt", "ca.crt")
+	}
+
+	if caCert == "" {
+		return "", fmt.Errorf("configmap %s/%s key %q is empty", namespace, "kube-root-ca.crt", "ca.crt")
+	}
+
+	return caCert, nil
+}
+
 func configureVaultSecretEngine(ctx context.Context, cfg VaultSecretEngineConfig) error {
 	vaultClient, err := newVaultSecretEngineClient(cfg)
 	if err != nil {
@@ -505,7 +580,7 @@ func (c *vaultSecretEngineClient) WriteKubernetesSecretEngineConfig(
 
 func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Client, mountPath string) error {
 	normalized := strings.Trim(mountPath, "/")
-  mount, err := vaultClient.Sys().GetMountWithContext(ctx, normalized)
+	mount, err := vaultClient.Sys().GetMountWithContext(ctx, normalized)
 	if err != nil {
 		return fmt.Errorf("failed to find Vault mount %q: %w", mountPath, err)
 	}
