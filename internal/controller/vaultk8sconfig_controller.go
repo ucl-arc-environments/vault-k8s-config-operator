@@ -186,7 +186,6 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Configured Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
 	return ctrl.Result{}, nil
 }
 
@@ -319,7 +318,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		if err := r.Create(ctx, namespace); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create Namespace %q: %w", vaultAuthNamespace, err)
 		}
-		log.Info("Created Namespace", "name", vaultAuthNamespace)
+		log.V(1).Info("Created Namespace", "name", vaultAuthNamespace)
 	}
 
 	clusterRole := &rbacv1.ClusterRole{}
@@ -358,7 +357,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		if err := r.Create(ctx, clusterRole); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create ClusterRole %q: %w", vaultAuthClusterRoleName, err)
 		}
-		log.Info("Created ClusterRole", "name", vaultAuthClusterRoleName)
+		log.V(1).Info("Created ClusterRole", "name", vaultAuthClusterRoleName)
 	}
 
 	clusterRoleBindingName := fmt.Sprintf("%s-binding-%s", vaultAuthServiceAccountName, vaultAuthNamespace)
@@ -386,7 +385,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		if err := r.Create(ctx, clusterRoleBinding); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create ClusterRoleBinding %q: %w", clusterRoleBindingName, err)
 		}
-		log.Info("Created ClusterRoleBinding", "name", clusterRoleBindingName, "namespace", vaultAuthNamespace)
+		log.V(1).Info("Created ClusterRoleBinding", "name", clusterRoleBindingName, "namespace", vaultAuthNamespace)
 	}
 
 	sa := &corev1.ServiceAccount{}
@@ -404,7 +403,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		if err := r.Create(ctx, sa); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create ServiceAccount %q: %w", vaultAuthServiceAccountName, err)
 		}
-		log.Info("Created ServiceAccount", "name", vaultAuthServiceAccountName, "namespace", vaultAuthNamespace)
+		log.V(1).Info("Created ServiceAccount", "name", vaultAuthServiceAccountName, "namespace", vaultAuthNamespace)
 	}
 
 	tokenSecret := &corev1.Secret{}
@@ -426,7 +425,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		if err := r.Create(ctx, tokenSecret); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("failed to create service account token Secret %q: %w", vaultAuthSecretName, err)
 		}
-		log.Info("Created service account token Secret", "name", vaultAuthSecretName, "namespace", vaultAuthNamespace)
+		log.V(1).Info("Created service account token Secret", "name", vaultAuthSecretName, "namespace", vaultAuthNamespace)
 	}
 
 	return nil
