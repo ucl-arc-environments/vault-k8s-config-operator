@@ -60,7 +60,7 @@ const (
 )
 
 type vaultSecretEngineInterface interface {
-	VerifyKubernetesEngineMount(mountPath string) error
+	VerifyKubernetesEngineMount(ctx context.Context, mountPath string) error
 	WriteKubernetesSecretEngineConfig(mountPath string, kubernetesHost string, jwt string, caCert string) error
 	CloseIdleConnections()
 }
@@ -399,7 +399,7 @@ func configureVaultSecretEngine(ctx context.Context, cfg VaultSecretEngineConfig
 	defer vaultClient.CloseIdleConnections()
 
 	if err := withRetry(ctx, "verify Kubernetes secret engine mount", func() error {
-		return vaultClient.VerifyKubernetesEngineMount(cfg.MountPath)
+		return vaultClient.VerifyKubernetesEngineMount(ctx, cfg.MountPath)
 	}); err != nil {
 		return err
 	}
@@ -438,18 +438,30 @@ func (c *vaultSecretEngineClient) WriteKubernetesSecretEngineConfig(
 	return nil
 }
 
-func verifyKubernetesEngineMount(vaultClient *vaultapi.Client, mountPath string) error {
-	normalized := strings.Trim(mountPath, "/") + "/"
-	mounts, err := vaultClient.Sys().ListMounts()
+func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Client, mountPath string) error {
+	normalized := strings.Trim(mountPath, "/")
+	response, err := vaultClient.Logical().ReadRawWithContext(ctx, normalized)
 	if err != nil {
-		return fmt.Errorf("failed to list Vault mounts: %w", err)
+		var responseErr *vaultapi.ResponseError
+		if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		}
+
+		return fmt.Errorf("failed to verify Kubernetes secret engine mount %q: %w", mountPath, err)
+	}
+	if response == nil {
+		return fmt.Errorf("failed to verify Kubernetes secret engine mount %q: empty response", mountPath)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+	}
+	if response.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("failed to verify Kubernetes secret engine mount %q: GET returned status %d", mountPath, response.StatusCode)
 	}
 
-	if _, exists := mounts[normalized]; exists {
-		return nil
-	}
-
-	return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+	return nil
 }
 
 func withRetry(ctx context.Context, operation string, fn func() error) error {
