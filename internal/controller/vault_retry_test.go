@@ -2,8 +2,11 @@ package controller
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
 )
@@ -69,5 +72,76 @@ func TestWithRetry_DoesNotRetryNonRetryableError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "non-retryable") {
 		t.Fatalf("expected non-retryable classification in error, got %q", err.Error())
+	}
+}
+
+func TestVerifyKubernetesEngineMount_ReadsMountPathDirectly(t *testing.T) {
+	t.Parallel()
+
+	requests := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- r.Method + " " + r.URL.Path
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/kubernetes" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{}}`))
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	clientCfg := vaultapi.DefaultConfig()
+	clientCfg.Address = server.URL
+	vaultClient, err := vaultapi.NewClient(clientCfg)
+	if err != nil {
+		t.Fatalf("failed to create Vault client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := verifyKubernetesEngineMount(ctx, vaultClient, "kubernetes"); err != nil {
+		t.Fatalf("verifyKubernetesEngineMount returned error: %v", err)
+	}
+
+	close(requests)
+	seen := make([]string, 0, len(requests))
+	for request := range requests {
+		seen = append(seen, request)
+	}
+
+	if len(seen) != 1 {
+		t.Fatalf("expected exactly one request, got %d: %v", len(seen), seen)
+	}
+	if seen[0] != "GET /v1/kubernetes" {
+		t.Fatalf("expected GET on mount path, got %q", seen[0])
+	}
+}
+
+func TestVerifyKubernetesEngineMount_ReturnsNotFoundForMissingMount(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	clientCfg := vaultapi.DefaultConfig()
+	clientCfg.Address = server.URL
+	vaultClient, err := vaultapi.NewClient(clientCfg)
+	if err != nil {
+		t.Fatalf("failed to create Vault client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err = verifyKubernetesEngineMount(ctx, vaultClient, "missing-mount")
+	if err == nil {
+		t.Fatal("expected error for missing mount, got nil")
+	}
+	if !strings.Contains(err.Error(), `mount "missing-mount" not found`) {
+		t.Fatalf("expected not found message, got %q", err.Error())
 	}
 }

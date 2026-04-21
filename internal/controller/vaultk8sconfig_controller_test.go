@@ -18,12 +18,14 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -40,6 +42,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 		ctx := context.Background()
 		const tokenSecretName = "vault-token"
 		const clusterCredentialsSecretName = "cluster-credentials"
+		const clusterCredentialsNamespace = "user-cluster-credentials"
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
@@ -49,6 +52,13 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 
 		BeforeEach(func() {
 			By("creating required secret references")
+			clusterCredentialsNamespaceResource := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: clusterCredentialsNamespace},
+			}
+			if err := k8sClient.Create(ctx, clusterCredentialsNamespaceResource); err != nil && !errors.IsAlreadyExists(err) {
+				Expect(err).NotTo(HaveOccurred())
+			}
+
 			tokenSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      tokenSecretName,
@@ -65,7 +75,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 			clusterCredentialsSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterCredentialsSecretName,
-					Namespace: "default",
+					Namespace: clusterCredentialsNamespace,
 				},
 				Data: map[string][]byte{
 					"token":  []byte("jwt-value"),
@@ -96,7 +106,8 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 							MountPath:      "kubernetes",
 							KubernetesHost: "https://kubernetes.default.svc",
 							ClusterCredentialsSecretRef: &v1.ClusterCredentialsSecretRef{
-								Name: clusterCredentialsSecretName,
+								Name:      clusterCredentialsSecretName,
+								Namespace: clusterCredentialsNamespace,
 							},
 						},
 					},
@@ -109,14 +120,19 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 			resource := &v1.VaultK8sConfig{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
+			if containsString(resource.Finalizers, vaultAuthFinalizer) {
+				resourceCopy := resource.DeepCopy()
+				resourceCopy.Finalizers = removeString(resourceCopy.Finalizers, vaultAuthFinalizer)
+				Expect(k8sClient.Update(ctx, resourceCopy)).To(Succeed())
+			}
 
 			By("Cleanup the specific resource instance VaultK8sConfig")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
 			By("Cleanup secret references")
-			for _, secretName := range []string{tokenSecretName, clusterCredentialsSecretName} {
+			for secretName, namespace := range map[string]string{tokenSecretName: "default", clusterCredentialsSecretName: clusterCredentialsNamespace} {
 				secret := &corev1.Secret{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: "default"}, secret)
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
 				if err == nil {
 					Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
 				}
@@ -137,6 +153,31 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should mark the resource failed when Vault mount verification fails", func() {
+			By("Reconciling the resource with a failing Vault configuration step")
+			controllerReconciler := &VaultK8sConfigReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				ConfigureSecretEngine: func(context.Context, VaultSecretEngineConfig) error {
+					return fmt.Errorf("Kubernetes secret engine mount %q not found", "kubernetes")
+				},
+			}
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(defaultRequeueDelay))
+
+			current := &v1.VaultK8sConfig{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, current)).To(Succeed())
+			readyCondition := meta.FindStatusCondition(current.Status.Conditions, conditionTypeReady)
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCondition.Reason).To(Equal(conditionReasonFailed))
+			Expect(readyCondition.Message).To(ContainSubstring(`mount "kubernetes" not found`))
 		})
 	})
 
@@ -196,6 +237,11 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 			resource := &v1.VaultK8sConfig{}
 			err := k8sClient.Get(ctx, defaultNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
+			if containsString(resource.Finalizers, vaultAuthFinalizer) {
+				resourceCopy := resource.DeepCopy()
+				resourceCopy.Finalizers = removeString(resourceCopy.Finalizers, vaultAuthFinalizer)
+				Expect(k8sClient.Update(ctx, resourceCopy)).To(Succeed())
+			}
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 
 			tokenSecret := &corev1.Secret{}
@@ -295,3 +341,22 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 		})
 	})
 })
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(items []string, target string) []string {
+	filtered := make([]string, 0, len(items))
+	for _, item := range items {
+		if item != target {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
