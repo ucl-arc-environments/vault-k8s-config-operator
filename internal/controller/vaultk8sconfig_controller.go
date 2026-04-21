@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "vault-k8s-config-operator/api/v1"
@@ -57,6 +58,7 @@ const (
 	vaultAuthServiceAccountName = "vault-auth"
 	vaultAuthSecretName         = "vault-auth"
 	vaultAuthClusterRoleName    = "vault-auth-cluster-role"
+	vaultAuthFinalizer          = "environments.arc.ucl/finalizer"
 )
 
 type vaultSecretEngineInterface interface {
@@ -137,6 +139,22 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
+	if !resource.DeletionTimestamp.IsZero() {
+		if err := r.reconcileDelete(ctx, resource); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if !controllerutil.ContainsFinalizer(resource, vaultAuthFinalizer) {
+		updated := resource.DeepCopy()
+		controllerutil.AddFinalizer(updated, vaultAuthFinalizer)
+		if err := r.Update(ctx, updated); err != nil {
+			return ctrl.Result{}, err
+		}
+		resource = updated
+	}
+
 	if err := r.markReconciling(ctx, resource); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -170,6 +188,54 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	log.Info("Configured Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
 	return ctrl.Result{}, nil
+}
+
+func (r *VaultK8sConfigReconciler) reconcileDelete(ctx context.Context, resource *v1.VaultK8sConfig) error {
+	if !controllerutil.ContainsFinalizer(resource, vaultAuthFinalizer) {
+		return nil
+	}
+
+	if resource.Spec.Engine.ClusterCredentialsSecretRef == nil {
+		if err := r.cleanupVaultAuthResourcesIfUnused(ctx, resource); err != nil {
+			return err
+		}
+	}
+
+	updated := resource.DeepCopy()
+	controllerutil.RemoveFinalizer(updated, vaultAuthFinalizer)
+	return r.Update(ctx, updated)
+}
+
+func (r *VaultK8sConfigReconciler) cleanupVaultAuthResourcesIfUnused(ctx context.Context, current *v1.VaultK8sConfig) error {
+	list := &v1.VaultK8sConfigList{}
+	if err := r.List(ctx, list); err != nil {
+		return fmt.Errorf("failed to list VaultK8sConfig resources for cleanup: %w", err)
+	}
+
+	for i := range list.Items {
+		item := &list.Items[i]
+		if item.Namespace == current.Namespace && item.Name == current.Name {
+			continue
+		}
+		if item.DeletionTimestamp.IsZero() && item.Spec.Engine.ClusterCredentialsSecretRef == nil {
+			return nil
+		}
+	}
+
+	clusterRoleBindingName := fmt.Sprintf("%s-binding-%s", vaultAuthServiceAccountName, vaultAuthNamespace)
+	for _, obj := range []client.Object{
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthSecretName, Namespace: vaultAuthNamespace}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthServiceAccountName, Namespace: vaultAuthNamespace}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: clusterRoleBindingName}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthClusterRoleName}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthNamespace}},
+	} {
+		if err := r.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to cleanup resource %T: %w", obj, err)
+		}
+	}
+
+	return nil
 }
 
 func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
