@@ -413,8 +413,8 @@ func configureVaultSecretEngine(ctx context.Context, cfg VaultSecretEngineConfig
 	return nil
 }
 
-func (c *vaultSecretEngineClient) VerifyKubernetesEngineMount(mountPath string) error {
-	return verifyKubernetesEngineMount(c.client, mountPath)
+func (c *vaultSecretEngineClient) VerifyKubernetesEngineMount(ctx context.Context, mountPath string) error {
+	return verifyKubernetesEngineMount(ctx, c.client, mountPath)
 }
 
 func (c *vaultSecretEngineClient) CloseIdleConnections() {
