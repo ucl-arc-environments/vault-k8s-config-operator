@@ -75,15 +75,15 @@ func TestWithRetry_DoesNotRetryNonRetryableError(t *testing.T) {
 	}
 }
 
-func TestVerifyKubernetesEngineMount_ReadsMountFromSysEndpoint(t *testing.T) {
+func TestVerifyKubernetesEngineMount_ReadsMountPathDirectly(t *testing.T) {
 	t.Parallel()
 
 	requests := make(chan string, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.Method + " " + r.URL.Path
-		if r.Method == http.MethodGet && strings.TrimSuffix(r.URL.Path, "/") == "/v1/sys/mounts/kubernetes" {
+		if r.Method == http.MethodGet && strings.TrimSuffix(r.URL.Path, "/") == "/v1/kubernetes" {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"type":"kubernetes","Type":"kubernetes"}`))
+			_, _ = w.Write([]byte(`{"data":{}}`))
 			return
 		}
 
@@ -114,8 +114,8 @@ func TestVerifyKubernetesEngineMount_ReadsMountFromSysEndpoint(t *testing.T) {
 	if len(seen) != 1 {
 		t.Fatalf("expected exactly one request, got %d: %v", len(seen), seen)
 	}
-	if seen[0] != "GET /v1/sys/mounts/kubernetes" {
-		t.Fatalf("expected GET on sys mount endpoint, got %q", seen[0])
+	if seen[0] != "GET /v1/kubernetes" {
+		t.Fatalf("expected GET on mount path, got %q", seen[0])
 	}
 }
 
@@ -142,8 +142,7 @@ func TestVerifyKubernetesEngineMount_ReturnsNotFoundForMissingMount(t *testing.T
 		t.Fatal("expected error for missing mount, got nil")
 	}
 	errMsg := err.Error()
-	if !strings.Contains(errMsg, `failed to find Vault mount "missing-mount"`) &&
-		!strings.Contains(errMsg, `Kubernetes secret engine mount "missing-mount" not found`) {
+	if !strings.Contains(errMsg, `Kubernetes secret engine mount "missing-mount" not found`) {
 		t.Fatalf("expected not found message, got %q", err.Error())
 	}
 }

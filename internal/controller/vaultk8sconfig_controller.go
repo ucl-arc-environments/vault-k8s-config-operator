@@ -582,16 +582,22 @@ func (c *vaultSecretEngineClient) WriteKubernetesSecretEngineConfig(
 
 func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Client, mountPath string) error {
 	normalized := strings.Trim(mountPath, "/")
-	mount, err := vaultClient.Sys().GetMountWithContext(ctx, normalized)
+	resp, err := vaultClient.Logical().ReadRawWithContext(ctx, normalized)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
+		var responseErr *vaultapi.ResponseError
+		if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		}
 		return fmt.Errorf("failed to find Vault mount %q: %w", mountPath, err)
 	}
-
-	if mount != nil && mount.Type == "kubernetes" {
-		return nil
+	if resp != nil && resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
 	}
 
-	return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+	return nil
 }
 
 func withRetry(ctx context.Context, operation string, fn func() error) error {
