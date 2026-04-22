@@ -116,13 +116,13 @@ type VaultK8sConfigReconciler struct {
 // +kubebuilder:rbac:groups=environments.arc.ucl,resources=vaultk8sconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=environments.arc.ucl,resources=vaultk8sconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=environments.arc.ucl,resources=vaultk8sconfigs/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;delete
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;bind;escalate
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;delete;bind;escalate
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -221,7 +221,7 @@ func (r *VaultK8sConfigReconciler) cleanupVaultAuthResourcesIfUnused(ctx context
 		if item.Namespace == current.Namespace && item.Name == current.Name {
 			continue
 		}
-		if item.DeletionTimestamp.IsZero() && item.Spec.Engine.ClusterCredentialsSecretRef == nil {
+		if item.DeletionTimestamp.IsZero() {
 			return nil
 		}
 	}

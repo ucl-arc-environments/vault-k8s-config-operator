@@ -285,6 +285,7 @@ rules:
   - serviceaccounts
   verbs:
   - create
+  - delete
   - get
   - list
   - watch
@@ -326,6 +327,7 @@ rules:
   - clusterrolebindings
   verbs:
   - create
+  - delete
   - get
   - list
   - watch
@@ -336,6 +338,7 @@ rules:
   verbs:
   - bind
   - create
+  - delete
   - escalate
   - get
   - list
