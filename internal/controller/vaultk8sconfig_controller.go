@@ -44,6 +44,7 @@ import (
 
 const (
 	defaultRequeueDelay           = time.Minute
+	successRequeueDelay           = 5 * time.Minute
 	defaultClusterJWTSecretKey    = "token"
 	defaultClusterCACertSecretKey = "ca.crt"
 	vaultClientRequestTimeout     = 10 * time.Second
@@ -189,7 +190,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: successRequeueDelay}, nil
 }
 
 func (r *VaultK8sConfigReconciler) reconcileDelete(ctx context.Context, resource *v1.VaultK8sConfig) error {
