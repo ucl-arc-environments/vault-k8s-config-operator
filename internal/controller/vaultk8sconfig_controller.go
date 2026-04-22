@@ -65,6 +65,7 @@ const (
 
 type vaultSecretEngineInterface interface {
 	VerifyKubernetesEngineMount(ctx context.Context, mountPath string) error
+	ReadKubernetesSecretEngineConfig(ctx context.Context, mountPath string) (map[string]any, error)
 	WriteKubernetesSecretEngineConfig(mountPath string, kubernetesHost string, jwt string, caCert string) error
 	CloseIdleConnections()
 }
@@ -533,6 +534,7 @@ func (r *VaultK8sConfigReconciler) getKubeRootCACert(ctx context.Context, namesp
 }
 
 func configureVaultSecretEngine(ctx context.Context, cfg VaultSecretEngineConfig) error {
+	log := logf.FromContext(ctx)
 	vaultClient, err := newVaultSecretEngineClient(cfg)
 	if err != nil {
 		return err
@@ -547,10 +549,19 @@ func configureVaultSecretEngine(ctx context.Context, cfg VaultSecretEngineConfig
 		return err
 	}
 
+	driftDetected := false
+	if currentConfig, err := vaultClient.ReadKubernetesSecretEngineConfig(ctx, cfg.MountPath); err == nil {
+		driftDetected = hasKubernetesSecretEngineDrift(currentConfig, cfg)
+	}
+
 	if err := withRetry(ctx, "write Kubernetes secret engine config", func() error {
 		return vaultClient.WriteKubernetesSecretEngineConfig(cfg.MountPath, cfg.KubernetesHost, cfg.JWT, cfg.CACert)
 	}); err != nil {
 		return err
+	}
+
+	if driftDetected {
+		log.Info("Corrected Vault Kubernetes secret engine drift", "mountPath", cfg.MountPath)
 	}
 
 	return nil
@@ -562,6 +573,21 @@ func (c *vaultSecretEngineClient) VerifyKubernetesEngineMount(ctx context.Contex
 
 func (c *vaultSecretEngineClient) CloseIdleConnections() {
 	c.httpClient.CloseIdleConnections()
+}
+
+func (c *vaultSecretEngineClient) ReadKubernetesSecretEngineConfig(
+	ctx context.Context,
+	mountPath string,
+) (map[string]any, error) {
+	secret, err := c.client.Logical().ReadWithContext(ctx, strings.Trim(mountPath, "/")+"/config")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Kubernetes secret engine config: %w", err)
+	}
+	if secret == nil {
+		return map[string]any{}, nil
+	}
+
+	return secret.Data, nil
 }
 
 func (c *vaultSecretEngineClient) WriteKubernetesSecretEngineConfig(
@@ -599,6 +625,43 @@ func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Clie
 	}
 
 	return nil
+}
+
+func hasKubernetesSecretEngineDrift(current map[string]any, desired VaultSecretEngineConfig) bool {
+	if current == nil {
+		return true
+	}
+
+	currentHost, ok := getStringValue(current, "kubernetes_host")
+	if !ok || currentHost != desired.KubernetesHost {
+		return true
+	}
+
+	currentCACert, ok := getStringValue(current, "kubernetes_ca_cert")
+	if !ok || currentCACert != desired.CACert {
+		return true
+	}
+
+	// Only compare it when JWT is present.
+	if currentJWT, ok := getStringValue(current, "service_account_jwt"); ok && currentJWT != desired.JWT {
+		return true
+	}
+
+	return false
+}
+
+func getStringValue(values map[string]any, key string) (string, bool) {
+	raw, found := values[key]
+	if !found {
+		return "", false
+	}
+
+	value, ok := raw.(string)
+	if !ok {
+		return "", false
+	}
+
+	return value, true
 }
 
 func withRetry(ctx context.Context, operation string, fn func() error) error {
