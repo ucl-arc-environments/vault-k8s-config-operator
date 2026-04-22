@@ -81,7 +81,7 @@ func TestVerifyKubernetesEngineMount_ReadsMountPathDirectly(t *testing.T) {
 	requests := make(chan string, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.Method + " " + r.URL.Path
-		if r.Method == http.MethodGet && strings.TrimSuffix(r.URL.Path, "/") == "/v1/kubernetes" {
+		if r.Method == http.MethodGet && strings.TrimSuffix(r.URL.Path, "/") == "/v1/kubernetes/config" {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"data":{}}`))
 			return
@@ -114,8 +114,8 @@ func TestVerifyKubernetesEngineMount_ReadsMountPathDirectly(t *testing.T) {
 	if len(seen) != 1 {
 		t.Fatalf("expected exactly one request, got %d: %v", len(seen), seen)
 	}
-	if seen[0] != "GET /v1/kubernetes" {
-		t.Fatalf("expected GET on mount path, got %q", seen[0])
+	if seen[0] != "GET /v1/kubernetes/config" {
+		t.Fatalf("expected GET on mount config path, got %q", seen[0])
 	}
 }
 

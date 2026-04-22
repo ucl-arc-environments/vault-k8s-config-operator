@@ -582,7 +582,7 @@ func (c *vaultSecretEngineClient) WriteKubernetesSecretEngineConfig(
 
 func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Client, mountPath string) error {
 	normalized := strings.Trim(mountPath, "/")
-	resp, err := vaultClient.Logical().ReadRawWithContext(ctx, normalized)
+	resp, err := vaultClient.Logical().ReadRawWithContext(ctx, normalized+"/config")
 	if resp != nil {
 		defer resp.Body.Close()
 	}
