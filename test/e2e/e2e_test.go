@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -419,11 +418,21 @@ func serviceAccountToken() (string, error) {
 		"kind": "TokenRequest"
 	}`
 
-	// Temporary file to store the token request
-	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
-	tokenRequestFile := filepath.Join("/tmp", secretName)
-	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
+	// Use a unique temporary file per invocation to avoid collisions across runs.
+	tokenRequestFile, err := os.CreateTemp("", fmt.Sprintf("%s-token-request-*.json", serviceAccountName))
 	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = os.Remove(tokenRequestFile.Name())
+	}()
+
+	if _, err = tokenRequestFile.WriteString(tokenRequestRawString); err != nil {
+		_ = tokenRequestFile.Close()
+		return "", err
+	}
+
+	if err = tokenRequestFile.Close(); err != nil {
 		return "", err
 	}
 
@@ -434,7 +443,7 @@ func serviceAccountToken() (string, error) {
 			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
 			namespace,
 			serviceAccountName,
-		), "-f", tokenRequestFile)
+		), "-f", tokenRequestFile.Name())
 
 		output, err := cmd.CombinedOutput()
 		g.Expect(err).NotTo(HaveOccurred())
