@@ -415,7 +415,11 @@ func splitImageTag(imageRef string) (string, string, error) {
 func serviceAccountToken() (string, error) {
 	const tokenRequestRawString = `{
 		"apiVersion": "authentication.k8s.io/v1",
-		"kind": "TokenRequest"
+		"kind": "TokenRequest",
+		"spec": {
+			"audiences": ["https://kubernetes.default.svc"],
+			"expirationSeconds": 600
+		}
 	}`
 
 	// Use a unique temporary file per invocation to avoid collisions across runs.
