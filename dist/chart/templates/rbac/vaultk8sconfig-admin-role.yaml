@@ -10,13 +10,13 @@ metadata:
   name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "vaultk8sconfig-admin-role" "context" $) }}
 rules:
 - apiGroups:
-  - environments.arc.ucl.ucl.arc.environments
+  - environments.arc.ucl
   resources:
   - vaultk8sconfigs
   verbs:
   - '*'
 - apiGroups:
-  - environments.arc.ucl.ucl.arc.environments
+  - environments.arc.ucl
   resources:
   - vaultk8sconfigs/status
   verbs:

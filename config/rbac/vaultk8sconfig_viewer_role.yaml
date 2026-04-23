@@ -1,7 +1,7 @@
 # This rule is not used by the project vault-k8s-config-operator itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants read-only access to environments.arc.ucl.ucl.arc.environments resources.
+# Grants read-only access to environments.arc.ucl resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
 
@@ -14,7 +14,7 @@ metadata:
   name: vaultk8sconfig-viewer-role
 rules:
 - apiGroups:
-  - environments.arc.ucl.ucl.arc.environments
+  - environments.arc.ucl
   resources:
   - vaultk8sconfigs
   verbs:
@@ -22,7 +22,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - environments.arc.ucl.ucl.arc.environments
+  - environments.arc.ucl
   resources:
   - vaultk8sconfigs/status
   verbs:
