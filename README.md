@@ -22,6 +22,10 @@ accompanying RBAC machinery.
 If using the operator to generate the `ServiceAccount` and associated `Secret`,
 a `VautK8sConfig` can be defined as follows:
 
+Operator-managed credentials are created in the fixed `vault-auth` namespace
+(not the CR namespace) and are shared across resources that omit
+`spec.engine.clusterCredentialsSecretRef`.
+
 ```yaml
 apiVersion: environments.arc.ucl/v1
 kind: VaultK8sConfig

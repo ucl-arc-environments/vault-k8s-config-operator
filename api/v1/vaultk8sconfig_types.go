@@ -69,8 +69,8 @@ type KubernetesSecretEngineSpec struct {
 
 	// clusterCredentialsSecretRef references a Secret that contains JWT and CA cert data.
 	// When omitted, the operator provisions a vault-auth ServiceAccount, its long-lived token
-	// Secret, a ClusterRole, and a ClusterRoleBinding in the same namespace as the CR and
-	// uses that token Secret for JWT and CA cert extraction.
+	// Secret, a ClusterRole, and a ClusterRoleBinding in the fixed "vault-auth" namespace,
+	// and uses that token Secret for JWT and CA cert extraction.
 	// +optional
 	ClusterCredentialsSecretRef *ClusterCredentialsSecretRef `json:"clusterCredentialsSecretRef,omitempty"`
 }

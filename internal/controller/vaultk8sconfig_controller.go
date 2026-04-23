@@ -277,7 +277,7 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 		}
 	} else {
 		useManagedClusterCredentials = true
-		// No reference provided: provision vault-auth resources in the CR's namespace.
+		// No reference provided: provision shared vault-auth resources in the fixed vault-auth namespace.
 		provision := r.EnsureVaultAuthResources
 		if provision == nil {
 			// Not testing: use the real provision function that creates vault-auth resources.
