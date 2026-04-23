@@ -221,7 +221,7 @@ func (r *VaultK8sConfigReconciler) cleanupVaultAuthResourcesIfUnused(ctx context
 		if item.Namespace == current.Namespace && item.Name == current.Name {
 			continue
 		}
-		if item.DeletionTimestamp.IsZero() {
+		if item.DeletionTimestamp.IsZero() && item.Spec.Engine.ClusterCredentialsSecretRef == nil {
 			return nil
 		}
 	}
