@@ -20,7 +20,7 @@ by the user or the operator can optionally generate the `ServiceAccount` and
 accompanying RBAC machinery.
 
 If using the operator to generate the `ServiceAccount` and associated `Secret`,
-a `VautK8sConfig` can be defined as follows:
+a `VaultK8sConfig` can be defined as follows:
 
 Operator-managed credentials are created in the fixed `vault-auth` namespace
 (not the CR namespace) and are shared across resources that omit
