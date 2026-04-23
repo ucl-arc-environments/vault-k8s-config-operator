@@ -57,12 +57,12 @@ spec:
     tokenSecretRef:
       name: vault-token
       key: token
-  ClusterCredentialsSecretRef:
-    name: vault-auth
-    namespace: vault-auth
-    JWTKey: token
-    CACertKey: ca.crt
   engine:
+    clusterCredentialsSecretRef:
+      name: vault-auth
+      namespace: vault-auth
+      jwtKey: token
+      caCertKey: ca.crt
     kubernetesHost: https://kubernetes.default.svc
     mountPath: kubernetes
   vaultAddress: http://host.docker.internal:8200
