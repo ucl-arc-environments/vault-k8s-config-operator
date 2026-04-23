@@ -17,7 +17,7 @@ this operator will not create the mount path if it does not exist.
 A `ServiceAccount` must exist within the cluster which Vault can subsequently
 use to issue authentication tokens for the cluster. This can be created upfront
 by the user or the operator can optionally generate the `ServiceAccount` and
-accompanying RBAC machinary.
+accompanying RBAC machinery.
 
 If using the operator to generate the `ServiceAccount` and associated `Secret`,
 a `VautK8sConfig` can be defined as follows:
