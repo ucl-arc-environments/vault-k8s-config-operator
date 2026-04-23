@@ -289,7 +289,7 @@ var _ = Describe("Manager", Ordered, func() {
 							"image": "curlimages/curl:latest",
 							"command": ["/bin/sh", "-c"],
 							"args": [
-								"for i in $(seq 1 30); do out=$(curl -sS -k -H 'Authorization: Bearer %s' -w 'HTTP_CODE:%%{http_code}' https://%s.%s.svc.cluster.local:8443/metrics); code=$$?; echo \"$$out\"; if [ $$code -eq 0 ] && echo \"$$out\" | grep -q 'HTTP_CODE:200'; then exit 0; fi; sleep 2; done; exit 1"
+								"for i in $(seq 1 30); do out=$(curl -sS -k -H 'Authorization: Bearer %s' -w 'HTTP_CODE:%%{http_code}' https://%s.%s.svc.cluster.local:8443/metrics); code=$?; echo \"$out\"; if [ $code -eq 0 ] && echo \"$out\" | grep -q 'HTTP_CODE:200'; then exit 0; fi; sleep 2; done; exit 1"
 							],
 							"securityContext": {
 								"readOnlyRootFilesystem": true,
