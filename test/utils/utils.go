@@ -41,7 +41,10 @@ func warnError(err error) {
 
 // Run executes the provided command within this context
 func Run(cmd *exec.Cmd) (string, error) {
-	dir, _ := GetProjectDir()
+	dir, err := GetProjectDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get project directory: %w", err)
+	}
 	cmd.Dir = dir
 
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
