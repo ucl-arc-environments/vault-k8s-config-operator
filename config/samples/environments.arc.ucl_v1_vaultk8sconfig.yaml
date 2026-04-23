@@ -16,5 +16,6 @@ spec:
     kubernetesHost: https://kubernetes.default.svc
     clusterCredentialsSecretRef:
       name: kube-cluster-credentials
+      namespace: vault-k8s-config-operator-system
       jwtKey: token
       caCertKey: ca.crt

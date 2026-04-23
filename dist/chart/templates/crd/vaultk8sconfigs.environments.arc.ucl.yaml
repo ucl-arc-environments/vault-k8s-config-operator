@@ -90,11 +90,14 @@ spec:
                         minLength: 1
                         type: string
                       namespace:
-                        description: namespace is the namespace of the Secret. When
-                          omitted, defaults to the CR's namespace.
+                        description: |-
+                          namespace is the namespace of the Secret that stores cluster credentials.
+                          This field is required when clusterCredentialsSecretRef is provided.
+                        minLength: 1
                         type: string
                     required:
                     - name
+                    - namespace
                     type: object
                   kubernetesHost:
                     description: kubernetesHost is the Kubernetes API server URL used

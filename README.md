@@ -43,8 +43,8 @@ spec:
   vaultAddress: http://host.docker.internal:8200
 ```
 
-Otherwise use the `ClusterCredentialsSecretRef` spec field to refer to the
-existing secret:
+Otherwise use `spec.engine.clusterCredentialsSecretRef` to refer to an existing
+secret. Both `name` and `namespace` are required when this field is set:
 
 ```yaml
 apiVersion: environments.arc.ucl/v1

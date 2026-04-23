@@ -81,9 +81,10 @@ type ClusterCredentialsSecretRef struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// namespace is the namespace of the Secret. When omitted, defaults to the CR's namespace.
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
+	// namespace is the namespace of the Secret that stores cluster credentials.
+	// This field is required when clusterCredentialsSecretRef is provided.
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
 
 	// jwtKey is the key in the Secret data that stores the JWT used by Vault.
 	// +kubebuilder:default="token"

@@ -266,9 +266,10 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 	if ref := resource.Spec.Engine.ClusterCredentialsSecretRef; ref != nil {
 		// Explicit secret reference provided.
 		clusterSecretName = ref.Name
-		if ref.Namespace != "" {
-			clusterSecretNamespace = ref.Namespace
+		if ref.Namespace == "" {
+			return VaultSecretEngineConfig{}, fmt.Errorf("cluster credentials secret namespace is required when clusterCredentialsSecretRef is set")
 		}
+		clusterSecretNamespace = ref.Namespace
 		if ref.JWTKey != "" {
 			jwtKey = ref.JWTKey
 		}
