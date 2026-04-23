@@ -203,7 +203,7 @@ var _ = Describe("Manager", Ordered, func() {
 				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Running"), "Incorrect controller-manager pod status")
+				g.Expect(strings.TrimSpace(output)).To(Equal("Running"), "Incorrect controller-manager pod status")
 			}
 			Eventually(verifyControllerUp).Should(Succeed())
 		})
@@ -235,7 +235,7 @@ var _ = Describe("Manager", Ordered, func() {
 					"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"), "Controller pod not ready")
+				g.Expect(strings.TrimSpace(output)).To(Equal("True"), "Controller pod not ready")
 			}
 			Eventually(verifyControllerPodReady, 3*time.Minute, time.Second).Should(Succeed())
 
@@ -317,8 +317,9 @@ var _ = Describe("Manager", Ordered, func() {
 					"-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).NotTo(Equal("Failed"), "curl pod failed before completion")
-				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
+				phase := strings.TrimSpace(output)
+				g.Expect(phase).NotTo(Equal("Failed"), "curl pod failed before completion")
+				g.Expect(phase).To(Equal("Succeeded"), "curl pod in wrong status")
 			}
 			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
 
