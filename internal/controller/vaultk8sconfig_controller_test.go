@@ -266,6 +266,12 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 				EnsureVaultAuthResources: func(ctx context.Context) error {
+					ns := &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{Name: vaultAuthNamespace},
+					}
+					if err := k8sClient.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
+						return err
+					}
 					secret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{Name: "vault-auth", Namespace: vaultAuthNamespace},
 						Data: map[string][]byte{
