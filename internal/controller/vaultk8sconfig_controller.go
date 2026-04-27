@@ -61,6 +61,9 @@ const (
 	vaultAuthSecretName         = "vault-auth"
 	vaultAuthClusterRoleName    = "vault-auth-cluster-role"
 	vaultAuthFinalizer          = "environments.arc.ucl/finalizer"
+
+	operatorManagedByLabelKey   = "app.kubernetes.io/managed-by"
+	operatorManagedByLabelValue = "vault-k8s-config-operator"
 )
 
 type vaultSecretEngineInterface interface {
@@ -211,6 +214,8 @@ func (r *VaultK8sConfigReconciler) reconcileDelete(ctx context.Context, resource
 }
 
 func (r *VaultK8sConfigReconciler) cleanupVaultAuthResourcesIfUnused(ctx context.Context, current *v1.VaultK8sConfig) error {
+	log := logf.FromContext(ctx)
+
 	list := &v1.VaultK8sConfigList{}
 	if err := r.List(ctx, list); err != nil {
 		return fmt.Errorf("failed to list VaultK8sConfig resources for cleanup: %w", err)
@@ -226,20 +231,60 @@ func (r *VaultK8sConfigReconciler) cleanupVaultAuthResourcesIfUnused(ctx context
 		}
 	}
 
+	// Check the Namespace first. Only delete namespace-scoped resources (Secret, ServiceAccount,
+	// and the Namespace itself) when the Namespace carries the operator-managed label, to avoid
+	// touching a pre-existing "vault-auth" namespace that belongs to something else.
+	ns := &corev1.Namespace{}
+	if err := r.Get(ctx, types.NamespacedName{Name: vaultAuthNamespace}, ns); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get Namespace %q: %w", vaultAuthNamespace, err)
+		}
+		// Already absent; no namespace-scoped resources to clean up.
+	} else if !isManagedByOperator(ns.Labels) {
+		log.Info("Skipping cleanup of Namespace not managed by this operator", "name", vaultAuthNamespace)
+	} else {
+		for _, obj := range []client.Object{
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthSecretName, Namespace: vaultAuthNamespace}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthServiceAccountName, Namespace: vaultAuthNamespace}},
+			ns,
+		} {
+			if err := r.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
+				return fmt.Errorf("failed to cleanup %T %q: %w", obj, obj.GetName(), err)
+			}
+		}
+	}
+
+	// Cluster-scoped resources: fetch each and verify the managed-by label before deleting,
+	// to avoid removing ClusterRole/ClusterRoleBinding that weren't created by this operator.
 	clusterRoleBindingName := fmt.Sprintf("%s-binding-%s", vaultAuthServiceAccountName, vaultAuthNamespace)
-	for _, obj := range []client.Object{
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthSecretName, Namespace: vaultAuthNamespace}},
-		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthServiceAccountName, Namespace: vaultAuthNamespace}},
-		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: clusterRoleBindingName}},
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthClusterRoleName}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: vaultAuthNamespace}},
+	type clusterScopedObj struct {
+		obj  client.Object
+		name string
+	}
+	for _, item := range []clusterScopedObj{
+		{&rbacv1.ClusterRoleBinding{}, clusterRoleBindingName},
+		{&rbacv1.ClusterRole{}, vaultAuthClusterRoleName},
 	} {
-		if err := r.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to cleanup resource %T: %w", obj, err)
+		if err := r.Get(ctx, types.NamespacedName{Name: item.name}, item.obj); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("failed to get %T %q: %w", item.obj, item.name, err)
+			}
+			continue
+		}
+		if !isManagedByOperator(item.obj.GetLabels()) {
+			log.Info("Skipping cleanup of resource not managed by this operator", "kind", fmt.Sprintf("%T", item.obj), "name", item.name)
+			continue
+		}
+		if err := r.Delete(ctx, item.obj); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to cleanup %T %q: %w", item.obj, item.name, err)
 		}
 	}
 
 	return nil
+}
+
+func isManagedByOperator(labels map[string]string) bool {
+	return labels[operatorManagedByLabelKey] == operatorManagedByLabelValue
 }
 
 func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
@@ -351,7 +396,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		namespace = &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   vaultAuthNamespace,
-				Labels: map[string]string{"app.kubernetes.io/managed-by": "vault-k8s-config-operator"},
+				Labels: map[string]string{operatorManagedByLabelKey: operatorManagedByLabelValue},
 			},
 		}
 		if err := r.Create(ctx, namespace); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -368,7 +413,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		clusterRole = &rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   vaultAuthClusterRoleName,
-				Labels: map[string]string{"app.kubernetes.io/managed-by": "vault-k8s-config-operator"},
+				Labels: map[string]string{operatorManagedByLabelKey: operatorManagedByLabelValue},
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
@@ -408,7 +453,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 		clusterRoleBinding = &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   clusterRoleBindingName,
-				Labels: map[string]string{"app.kubernetes.io/managed-by": "vault-k8s-config-operator"},
+				Labels: map[string]string{operatorManagedByLabelKey: operatorManagedByLabelValue},
 			},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
@@ -436,7 +481,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vaultAuthServiceAccountName,
 				Namespace: vaultAuthNamespace,
-				Labels:    map[string]string{"app.kubernetes.io/managed-by": "vault-k8s-config-operator"},
+				Labels:    map[string]string{operatorManagedByLabelKey: operatorManagedByLabelValue},
 			},
 		}
 		if err := r.Create(ctx, sa); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -457,7 +502,7 @@ func (r *VaultK8sConfigReconciler) ensureVaultAuthResources(ctx context.Context)
 				Annotations: map[string]string{
 					"kubernetes.io/service-account.name": vaultAuthServiceAccountName,
 				},
-				Labels: map[string]string{"app.kubernetes.io/managed-by": "vault-k8s-config-operator"},
+				Labels: map[string]string{operatorManagedByLabelKey: operatorManagedByLabelValue},
 			},
 			Type: corev1.SecretTypeServiceAccountToken,
 		}
