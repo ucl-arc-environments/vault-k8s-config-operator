@@ -137,6 +137,12 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 					Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
 				}
 			}
+
+			By("Cleanup the cluster credentials Namespace")
+			clusterCredentialsNs := &corev1.Namespace{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: clusterCredentialsNamespace}, clusterCredentialsNs); err == nil {
+				Expect(k8sClient.Delete(ctx, clusterCredentialsNs)).To(Succeed())
+			}
 		})
 
 		It("should successfully reconcile the resource", func() {
