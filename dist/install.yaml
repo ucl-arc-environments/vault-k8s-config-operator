@@ -511,23 +511,6 @@ spec:
     app.kubernetes.io/name: vault-k8s-config-operator
     control-plane: controller-manager
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: vault-k8s-config-operator
-  name: vault-k8s-config-operator-webhook-service
-  namespace: vault-k8s-config-operator-system
-spec:
-  ports:
-  - port: 443
-    protocol: TCP
-    targetPort: 9443
-  selector:
-    app.kubernetes.io/name: vault-k8s-config-operator
-    control-plane: controller-manager
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -568,9 +551,6 @@ spec:
           periodSeconds: 20
         name: manager
         ports:
-        - containerPort: 9443
-          name: webhook-server
-          protocol: TCP
         - containerPort: 8443
           name: https
           protocol: TCP
@@ -594,9 +574,6 @@ spec:
             - ALL
           readOnlyRootFilesystem: true
         volumeMounts:
-        - mountPath: /tmp/k8s-webhook-server/serving-certs
-          name: webhook-certs
-          readOnly: true
         - mountPath: /tmp/k8s-metrics-server/metrics-certs
           name: metrics-certs
           readOnly: true
@@ -607,9 +584,6 @@ spec:
       serviceAccountName: vault-k8s-config-operator-manager
       terminationGracePeriodSeconds: 10
       volumes:
-      - name: webhook-certs
-        secret:
-          secretName: webhook-server-cert
       - name: metrics-certs
         secret:
           items:
@@ -640,23 +614,6 @@ spec:
   secretName: metrics-server-cert
 ---
 apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: vault-k8s-config-operator
-  name: vault-k8s-config-operator-serving-cert
-  namespace: vault-k8s-config-operator-system
-spec:
-  dnsNames:
-  - vault-k8s-config-operator-webhook-service.vault-k8s-config-operator-system.svc
-  - vault-k8s-config-operator-webhook-service.vault-k8s-config-operator-system.svc.cluster.local
-  issuerRef:
-    kind: Issuer
-    name: vault-k8s-config-operator-selfsigned-issuer
-  secretName: webhook-server-cert
----
-apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   labels:
@@ -666,31 +623,3 @@ metadata:
   namespace: vault-k8s-config-operator-system
 spec:
   selfSigned: {}
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: vault-k8s-config-operator-system/vault-k8s-config-operator-serving-cert
-  name: vault-k8s-config-operator-validating-webhook-configuration
-webhooks:
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: vault-k8s-config-operator-webhook-service
-      namespace: vault-k8s-config-operator-system
-      path: /validate-environments-arc-ucl-v1-vaultk8sconfig
-  failurePolicy: Fail
-  name: vvaultk8sconfig-v1.kb.io
-  rules:
-  - apiGroups:
-    - environments.arc.ucl
-    apiVersions:
-    - v1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - vaultk8sconfigs
-  sideEffects: None
