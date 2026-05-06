@@ -34,6 +34,7 @@ import (
 
 	v1 "vault-k8s-config-operator/api/v1"
 	"vault-k8s-config-operator/internal/controller"
+	webhookv1 "vault-k8s-config-operator/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -111,6 +112,11 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "VaultK8sConfig")
+		os.Exit(1)
+	}
+
+	if err := webhookv1.SetupVaultK8sConfigWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create webhook", "webhook", "VaultK8sConfig")
 		os.Exit(1)
 	}
 
