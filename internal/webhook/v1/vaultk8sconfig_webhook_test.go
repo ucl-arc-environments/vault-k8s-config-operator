@@ -39,9 +39,6 @@ var _ = Describe("VaultK8sConfig Webhook", func() {
 		obj = &v1.VaultK8sConfig{}
 		oldObj = &v1.VaultK8sConfig{}
 		validator = VaultK8sConfigCustomValidator{}
-		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
-		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
-		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
 	})
 
 	AfterEach(func() {
