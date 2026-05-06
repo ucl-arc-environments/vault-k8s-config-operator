@@ -39,7 +39,7 @@ var vaultk8sconfiglog = logf.Log.WithName("vaultk8sconfig-resource")
 // SetupVaultK8sConfigWebhookWithManager registers the webhook for VaultK8sConfig in the manager.
 func SetupVaultK8sConfigWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &v1.VaultK8sConfig{}).
-		WithValidator(&VaultK8sConfigCustomValidator{Client: mgr.GetClient()}).
+		WithValidator(&VaultK8sConfigCustomValidator{Client: mgr.GetAPIReader()}).
 		Complete()
 }
 
