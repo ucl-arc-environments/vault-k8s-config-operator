@@ -82,9 +82,10 @@ var _ = BeforeSuite(func() {
 	}
 
 	// Retrieve the first found binary directory to allow running tests from IDEs
-	if getFirstFoundEnvTestBinaryDir() != "" {
-		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
-	}
+ 	binaryAssetsDir := getFirstFoundEnvTestBinaryDir()
+ 	if binaryAssetsDir != "" {
+ 		testEnv.BinaryAssetsDirectory = binaryAssetsDir
+ 	}
 
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
