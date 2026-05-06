@@ -47,6 +47,9 @@ spec:
         {{- range .Values.manager.args }}
         - {{ . }}
         {{- end }}
+        {{- if .Values.certManager.enable }}
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        {{- end }}
         {{- if and .Values.certManager.enable .Values.metrics.enable }}
         - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
         {{- end }}
@@ -62,6 +65,9 @@ spec:
           periodSeconds: 20
         name: manager
         ports:
+        - containerPort: {{ .Values.webhook.port }}
+          name: webhook-server
+          protocol: TCP
         - containerPort: 8443
           name: https
           protocol: TCP
@@ -84,6 +90,11 @@ spec:
           {}
           {{- end }}
         volumeMounts:
+        {{- if .Values.certManager.enable }}
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
+        {{- end }}
         {{- if and .Values.certManager.enable .Values.metrics.enable }}
         - mountPath: /tmp/k8s-metrics-server/metrics-certs
           name: metrics-certs
@@ -98,6 +109,11 @@ spec:
       serviceAccountName: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "manager" "context" $) }}
       terminationGracePeriodSeconds: 10
       volumes:
+      {{- if .Values.certManager.enable }}
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
+      {{- end }}
       {{- if and .Values.certManager.enable .Values.metrics.enable }}
       - name: metrics-certs
         secret:
