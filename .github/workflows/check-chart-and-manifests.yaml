@@ -32,8 +32,10 @@ jobs:
           go-version: 1.25
 
       - name: Install kubebuilder
+        env:
+          KUBEBUILDER_VERSION: "v4.14.0"
         run: |
-          curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)"
+          curl -L -o kubebuilder "https://github.com/kubernetes-sigs/kubebuilder/releases/download/${KUBEBUILDER_VERSION}/kubebuilder_$(go env GOOS)_$(go env GOARCH)"
           chmod +x kubebuilder && sudo mv kubebuilder /usr/local/bin/
           echo "/usr/local/bin/kubebuilder" >> "$GITHUB_PATH"
 

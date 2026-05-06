@@ -176,4 +176,3 @@ webhook:
 ##
 prometheus:
   enable: false
-
