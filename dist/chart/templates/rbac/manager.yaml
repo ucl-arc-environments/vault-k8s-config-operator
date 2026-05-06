@@ -1,3 +1,4 @@
+{{- if ne .Values.serviceAccount.enable false }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -6,5 +7,15 @@ metadata:
     app.kubernetes.io/name: {{ include "vault-k8s-config-operator.name" . }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-  name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "manager" "context" $) }}
+    {{- with .Values.serviceAccount.labels }}
+    {{- with omit . "app.kubernetes.io/managed-by" "app.kubernetes.io/name" "helm.sh/chart" "app.kubernetes.io/instance" }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  name: vault-k8s-config-operator-manager
   namespace: {{ .Release.Namespace }}
+{{- end }}
