@@ -556,7 +556,6 @@ spec:
         - --metrics-bind-address=:8443
         - --leader-elect
         - --health-probe-bind-address=:8081
-        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
         command:
         - /manager

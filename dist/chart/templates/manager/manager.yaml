@@ -87,9 +87,6 @@ spec:
         {{- range .Values.manager.args }}
         - {{ . }}
         {{- end }}
-        {{- if .Values.certManager.enable }}
-        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
-        {{- end }}
         {{- if and .Values.certManager.enable .Values.metrics.enable }}
         - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
         {{- end }}
