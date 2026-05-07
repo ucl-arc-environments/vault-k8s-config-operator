@@ -1,0 +1,68 @@
+---
+name: Helm Chart and Manifests Check
+
+on:
+  push:
+    branches:
+      - main
+      - renovate/**
+  pull_request:
+    types:
+      - opened
+      - ready_for_review
+      - reopened
+      - synchronize
+
+concurrency:
+  cancel-in-progress: true
+  group: >-
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  helm-chart-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version: 1.25
+
+      - name: Install kubebuilder
+        env:
+          KUBEBUILDER_VERSION: "v4.14.0"
+        run: |
+          curl -L -o kubebuilder "https://github.com/kubernetes-sigs/kubebuilder/releases/download/${KUBEBUILDER_VERSION}/kubebuilder_$(go env GOOS)_$(go env GOARCH)"
+          chmod +x kubebuilder && sudo mv kubebuilder /usr/local/bin/
+          echo "/usr/local/bin/kubebuilder" >> "$GITHUB_PATH"
+
+      - name: Verify Helm chart is up to date
+        run: make helm-chart-check
+
+  manifests-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version: 1.25
+
+      - name: Verify manifests and generated code are up to date
+        run: |
+          set -euo pipefail
+          make manifests generate
+
+          if ! git diff --quiet -- config; then
+            echo "Generated files are out of date."
+            echo "Run: make manifests generate helm-chart"
+            echo "Then commit the resulting changes."
+            git --no-pager diff -- config | sed -n '1,300p'
+            exit 1
+          fi
