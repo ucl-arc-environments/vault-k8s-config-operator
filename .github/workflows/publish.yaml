@@ -61,5 +61,5 @@ jobs:
         working-directory: ./dist/chart
         run: |
           helm dependency build
-          helm package .
+          helm package . --version ${{ github.event.release.tag_name }}
           helm push ./*.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
