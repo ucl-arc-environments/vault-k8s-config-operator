@@ -45,10 +45,10 @@ spec:
               auth:
                 description: auth defines how the operator authenticates to Vault.
                 properties:
-                  appRoleAuthRef:
+                  appRoleAuth:
                     description: |-
-                      appRoleAuthRef references secrets containing AppRole credentials (role_id and secret_id).
-                      Either tokenSecretRef or appRoleAuthRef must be specified.
+                      appRoleAuth contains AppRole credentials (role_id and secret_id).
+                      Either tokenSecretRef or appRoleAuth must be specified.
                     properties:
                       mountPath:
                         default: approle
@@ -81,7 +81,7 @@ spec:
                   tokenSecretRef:
                     description: |-
                       tokenSecretRef references a Kubernetes Secret key that contains a Vault token.
-                      Either tokenSecretRef or appRoleAuthRef must be specified.
+                      Either tokenSecretRef or appRoleAuth must be specified.
                     properties:
                       key:
                         description: key is the data key in the Secret.
