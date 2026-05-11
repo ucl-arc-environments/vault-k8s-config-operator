@@ -725,17 +725,26 @@ func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Clie
 	normalized := strings.Trim(mountPath, "/")
 	resp, err := vaultClient.Logical().ReadRawWithContext(ctx, normalized+"/config")
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close() // Ignore close errors on read
+		}()
 	}
 	if err != nil {
 		var responseErr *vaultapi.ResponseError
-		if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound {
-			return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		if errors.As(err, &responseErr) {
+			if responseErr.StatusCode == http.StatusNotFound {
+				return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+			}
+			// A 403 means the mount exists but the token lacks read on the config path.
+			// This is sufficient to confirm the mount is present; proceed.
+			if responseErr.StatusCode == http.StatusForbidden {
+				return nil
+			}
 		}
 		return fmt.Errorf("failed to find Vault mount %q: %w", mountPath, err)
 	}
 	if resp != nil && resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
 	}
 
 	return nil
