@@ -341,9 +341,9 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 			return VaultSecretEngineConfig{}, fmt.Errorf("vault token secret reference is invalid: %w", err)
 		}
 		vaultToken = token
-	} else if resource.Spec.Auth.AppRoleAuthRef != nil {
+	} else if resource.Spec.Auth.AppRoleAuth != nil {
 		// AppRole authentication
-		roleID := resource.Spec.Auth.AppRoleAuthRef.RoleId
+		roleID := resource.Spec.Auth.AppRoleAuth.RoleId
 		if roleID == "" {
 			return VaultSecretEngineConfig{}, fmt.Errorf("AppRole role_id is required")
 		}
@@ -351,8 +351,8 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 		secretID, err := r.getSecretValue(
 			ctx,
 			resource.Namespace,
-			resource.Spec.Auth.AppRoleAuthRef.SecretIdSecretRef.Name,
-			resource.Spec.Auth.AppRoleAuthRef.SecretIdSecretRef.Key,
+			resource.Spec.Auth.AppRoleAuth.SecretIdSecretRef.Name,
+			resource.Spec.Auth.AppRoleAuth.SecretIdSecretRef.Key,
 		)
 		if err != nil {
 			return VaultSecretEngineConfig{}, fmt.Errorf("AppRole secret_id secret reference is invalid: %w", err)
@@ -360,12 +360,12 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 
 		appRoleRoleID = roleID
 		appRoleSecretID = secretID
-		appRoleMountPath = resource.Spec.Auth.AppRoleAuthRef.MountPath
+		appRoleMountPath = resource.Spec.Auth.AppRoleAuth.MountPath
 		if appRoleMountPath == "" {
 			appRoleMountPath = "approle"
 		}
 	} else {
-		return VaultSecretEngineConfig{}, fmt.Errorf("either tokenSecretRef or appRoleAuthRef must be specified in auth")
+		return VaultSecretEngineConfig{}, fmt.Errorf("either tokenSecretRef or AppRoleAuth must be specified in auth")
 	}
 
 	jwtKey := defaultClusterJWTSecretKey

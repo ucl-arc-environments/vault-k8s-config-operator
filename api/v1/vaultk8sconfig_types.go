@@ -43,18 +43,18 @@ type VaultK8sConfigSpec struct {
 // VaultAuthSpec defines Vault authentication configuration.
 type VaultAuthSpec struct {
 	// tokenSecretRef references a Kubernetes Secret key that contains a Vault token.
-	// Either tokenSecretRef or appRoleAuthRef must be specified.
+	// Either tokenSecretRef or appRoleAuth must be specified.
 	// +optional
 	TokenSecretRef *SecretKeyRef `json:"tokenSecretRef,omitempty"`
 
-	// appRoleAuthRef references secrets containing AppRole credentials (role_id and secret_id).
-	// Either tokenSecretRef or appRoleAuthRef must be specified.
+	// appRoleAuth contains AppRole credentials (role_id and secret_id).
+	// Either tokenSecretRef or appRoleAuth must be specified.
 	// +optional
-	AppRoleAuthRef *AppRoleAuthRef `json:"appRoleAuthRef,omitempty"`
+	AppRoleAuth *AppRoleAuth `json:"appRoleAuth,omitempty"`
 }
 
-// AppRoleAuthRef references secrets containing AppRole role_id and secret_id.
-type AppRoleAuthRef struct {
+// AppRoleAuth contains AppRole role_id, secret_id and optional mount path.
+type AppRoleAuth struct {
 	// roleId is the Vault AppRole role_id.
 	RoleId string `json:"roleId"`
 
