@@ -9,7 +9,7 @@ spec:
   vaultAddress: https://vault.example.com
   vaultNamespace: my-namespace  # Optional: for Vault Enterprise
   auth:
-    appRoleAuthRef:
+    AppRoleAuth:
       roleId: my-approle-role-id
       secretIdSecretRef:
         name: vault-approle
