@@ -42,9 +42,56 @@ spec:
               auth:
                 description: auth defines how the operator authenticates to Vault.
                 properties:
+                  appRoleAuthRef:
+                    description: |-
+                      appRoleAuthRef references secrets containing AppRole credentials (role_id and secret_id).
+                      Either tokenSecretRef or appRoleAuthRef must be specified.
+                    properties:
+                      mountPath:
+                        default: approle
+                        description: mountPath is the path where the AppRole auth
+                          method is mounted in Vault.
+                        type: string
+                      roleIdSecretRef:
+                        description: roleIdSecretRef references a Kubernetes Secret
+                          key that contains the AppRole role_id.
+                        properties:
+                          key:
+                            description: key is the data key in the Secret.
+                            minLength: 1
+                            type: string
+                          name:
+                            description: name is the Secret name.
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      secretIdSecretRef:
+                        description: secretIdSecretRef references a Kubernetes Secret
+                          key that contains the AppRole secret_id.
+                        properties:
+                          key:
+                            description: key is the data key in the Secret.
+                            minLength: 1
+                            type: string
+                          name:
+                            description: name is the Secret name.
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - roleIdSecretRef
+                    - secretIdSecretRef
+                    type: object
                   tokenSecretRef:
-                    description: tokenSecretRef references a Kubernetes Secret key
-                      that contains a Vault token.
+                    description: |-
+                      tokenSecretRef references a Kubernetes Secret key that contains a Vault token.
+                      Either tokenSecretRef or appRoleAuthRef must be specified.
                     properties:
                       key:
                         description: key is the data key in the Secret.
@@ -58,8 +105,6 @@ spec:
                     - key
                     - name
                     type: object
-                required:
-                - tokenSecretRef
                 type: object
               engine:
                 description: engine defines the Kubernetes secret engine mount path

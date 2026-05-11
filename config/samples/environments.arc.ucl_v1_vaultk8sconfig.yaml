@@ -7,13 +7,17 @@ metadata:
   name: vaultk8sconfig-sample
 spec:
   vaultAddress: https://vault.example.com
+  # vaultNamespace: my-namespace  # Optional: for Vault Enterprise
   auth:
+    # Token-based authentication
     tokenSecretRef:
       name: vault-auth
       key: token
   engine:
     mountPath: kubernetes
     kubernetesHost: https://kubernetes.default.svc
+    # Optional: reference to a Secret with cluster credentials (JWT and CA cert)
+    # When omitted, the operator auto-provisions vault-auth resources
     clusterCredentialsSecretRef:
       name: kube-cluster-credentials
       namespace: vault-k8s-config-operator-system

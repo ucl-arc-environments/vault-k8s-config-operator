@@ -52,7 +52,7 @@ var _ = Describe("VaultK8sConfig Webhook", func() {
 				Spec: v1.VaultK8sConfigSpec{
 					VaultAddress: "https://vault.example.com",
 					Auth: v1.VaultAuthSpec{
-						TokenSecretRef: v1.SecretKeyRef{Name: "vault-token", Key: "token"},
+						TokenSecretRef: &v1.SecretKeyRef{Name: "vault-token", Key: "token"},
 					},
 					Engine: v1.KubernetesSecretEngineSpec{
 						MountPath:      mountPath,

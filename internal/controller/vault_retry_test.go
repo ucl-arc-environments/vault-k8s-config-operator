@@ -142,7 +142,7 @@ func TestVerifyKubernetesEngineMount_ReturnsNotFoundForMissingMount(t *testing.T
 		t.Fatal("expected error for missing mount, got nil")
 	}
 	errMsg := err.Error()
-	if !strings.Contains(errMsg, `Kubernetes secret engine mount "missing-mount" not found`) {
+	if !strings.Contains(errMsg, `kubernetes secret engine mount "missing-mount" not found`) {
 		t.Fatalf("expected not found message, got %q", err.Error())
 	}
 }

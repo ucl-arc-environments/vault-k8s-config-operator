@@ -1,0 +1,22 @@
+apiVersion: environments.arc.ucl/v1
+kind: VaultK8sConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: vault-k8s-config-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: vaultk8sconfig-approle-sample
+spec:
+  vaultAddress: https://vault.example.com
+  vaultNamespace: my-namespace  # Optional: for Vault Enterprise
+  auth:
+    appRoleAuthRef:
+      roleId: my-approle-role-id
+      secretIdSecretRef:
+        name: vault-approle
+        key: secret-id
+      mountPath: approle  # Optional: defaults to "approle"
+  engine:
+    mountPath: kubernetes
+    kubernetesHost: https://kubernetes.default.svc
+    # Using managed cluster credentials (vault-auth SA in vault-auth namespace)
+    # Omit clusterCredentialsSecretRef to auto-provision vault-auth resources

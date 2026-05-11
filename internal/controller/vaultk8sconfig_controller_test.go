@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -97,7 +98,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 					Spec: v1.VaultK8sConfigSpec{
 						VaultAddress: "https://vault.example.com",
 						Auth: v1.VaultAuthSpec{
-							TokenSecretRef: v1.SecretKeyRef{
+							TokenSecretRef: &v1.SecretKeyRef{
 								Name: tokenSecretName,
 								Key:  "token",
 							},
@@ -223,7 +224,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 					Spec: v1.VaultK8sConfigSpec{
 						VaultAddress: "https://vault.example.com",
 						Auth: v1.VaultAuthSpec{
-							TokenSecretRef: v1.SecretKeyRef{
+							TokenSecretRef: &v1.SecretKeyRef{
 								Name: defaultTokenSecretName,
 								Key:  "token",
 							},
@@ -355,12 +356,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 })
 
 func containsString(items []string, target string) bool {
-	for _, item := range items {
-		if item == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(items, target)
 }
 
 func removeString(items []string, target string) []string {
