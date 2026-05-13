@@ -88,15 +88,16 @@ func (v *VaultK8sConfigCustomValidator) validateUniqueMountPath(ctx context.Cont
 
 	targetMountPath := normalizedMountPath(obj.Spec.Engine.MountPath)
 	var existing v1.VaultK8sConfigList
-	if err := v.Client.List(ctx, &existing, client.InNamespace(obj.Namespace)); err != nil {
+	if err := v.Client.List(ctx, &existing); err != nil {
 		return fmt.Errorf("failed to list existing VaultK8sConfig resources: %w", err)
 	}
 
 	for i := range existing.Items {
 		candidate := &existing.Items[i]
-		if candidate.Name == obj.Name {
+		if candidate.Namespace == obj.Namespace && candidate.Name == obj.Name {
 			continue
 		}
+
 		if normalizedMountPath(candidate.Spec.Engine.MountPath) != targetMountPath {
 			continue
 		}

@@ -71,7 +71,7 @@ var _ = Describe("VaultK8sConfig Webhook", func() {
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(),
 			}
 
-			obj = newConfig("candidate", "other", "/kubernetes/")
+			obj = newConfig("candidate", "other", "kubernetes")
 			_, err := validator.ValidateCreate(context.Background(), obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("duplicates mountPath"))
@@ -101,7 +101,7 @@ var _ = Describe("VaultK8sConfig Webhook", func() {
 			}
 
 			oldObj = newConfig("existing", "default", "kubernetes")
-			obj = newConfig("existing", "default", "/kubernetes/")
+			obj = newConfig("existing", "default", "kubernetes")
 			_, err := validator.ValidateUpdate(context.Background(), oldObj, obj)
 			Expect(err).NotTo(HaveOccurred())
 		})
