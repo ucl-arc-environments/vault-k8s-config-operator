@@ -52,7 +52,7 @@ var _ = Describe("VaultK8sConfig Webhook", func() {
 				Spec: v1.VaultK8sConfigSpec{
 					VaultAddress: "https://vault.example.com",
 					Auth: v1.VaultAuthSpec{
-						TokenSecretRef: v1.SecretKeyRef{Name: "vault-token", Key: "token"},
+						TokenSecretRef: &v1.SecretKeyRef{Name: "vault-token", Key: "token"},
 					},
 					Engine: v1.KubernetesSecretEngineSpec{
 						MountPath:      mountPath,
@@ -71,7 +71,7 @@ var _ = Describe("VaultK8sConfig Webhook", func() {
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(),
 			}
 
-			obj = newConfig("candidate", "other", "/kubernetes/")
+			obj = newConfig("candidate", "other", "kubernetes")
 			_, err := validator.ValidateCreate(context.Background(), obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("duplicates mountPath"))
@@ -101,7 +101,7 @@ var _ = Describe("VaultK8sConfig Webhook", func() {
 			}
 
 			oldObj = newConfig("existing", "default", "kubernetes")
-			obj = newConfig("existing", "default", "/kubernetes/")
+			obj = newConfig("existing", "default", "kubernetes")
 			_, err := validator.ValidateUpdate(context.Background(), oldObj, obj)
 			Expect(err).NotTo(HaveOccurred())
 		})

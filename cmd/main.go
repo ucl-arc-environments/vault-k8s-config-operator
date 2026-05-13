@@ -67,7 +67,8 @@ func main() {
 		&metricsCertPath,
 		"metrics-cert-path",
 		"",
-		"Directory containing TLS certs for the metrics endpoint. If empty, controller-runtime uses its default cert directory.",
+		"Directory containing TLS certs for the metrics endpoint. "+
+			"If empty, controller-runtime uses its default cert directory.",
 	)
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+

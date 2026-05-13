@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -97,7 +98,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 					Spec: v1.VaultK8sConfigSpec{
 						VaultAddress: "https://vault.example.com",
 						Auth: v1.VaultAuthSpec{
-							TokenSecretRef: v1.SecretKeyRef{
+							TokenSecretRef: &v1.SecretKeyRef{
 								Name: tokenSecretName,
 								Key:  "token",
 							},
@@ -138,11 +139,8 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 				}
 			}
 
-			By("Cleanup the cluster credentials Namespace")
-			clusterCredentialsNs := &corev1.Namespace{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: clusterCredentialsNamespace}, clusterCredentialsNs); err == nil {
-				Expect(k8sClient.Delete(ctx, clusterCredentialsNs)).To(Succeed())
-			}
+			// Note: do not delete the namespace itself — envtest has no namespace lifecycle
+			// controller so deleted namespaces stay in Terminating state indefinitely.
 		})
 
 		It("should successfully reconcile the resource", func() {
@@ -223,7 +221,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 					Spec: v1.VaultK8sConfigSpec{
 						VaultAddress: "https://vault.example.com",
 						Auth: v1.VaultAuthSpec{
-							TokenSecretRef: v1.SecretKeyRef{
+							TokenSecretRef: &v1.SecretKeyRef{
 								Name: defaultTokenSecretName,
 								Key:  "token",
 							},
@@ -260,10 +258,8 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 				Expect(k8sClient.Delete(ctx, vaultAuthSecret)).To(Succeed())
 			}
 
-			vaultAuthNamespaceResource := &corev1.Namespace{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: vaultAuthNamespace}, vaultAuthNamespaceResource); err == nil {
-				Expect(k8sClient.Delete(ctx, vaultAuthNamespaceResource)).To(Succeed())
-			}
+			// Note: do not delete the namespace itself — envtest has no namespace lifecycle
+			// controller so deleted namespaces stay in Terminating state indefinitely.
 		})
 
 		It("should provision vault-auth resources and reconcile successfully", func() {
@@ -309,8 +305,9 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 		const clusterRoleBindingName = "vault-auth-binding-vault-auth"
 
 		AfterEach(func() {
+			// Note: do not delete the namespace itself — envtest has no namespace lifecycle
+			// controller so deleted namespaces stay in Terminating state indefinitely.
 			for _, obj := range []client.Object{
-				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "vault-auth", Namespace: namespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "vault-auth", Namespace: namespace}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: clusterRoleBindingName}},
@@ -355,12 +352,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 })
 
 func containsString(items []string, target string) bool {
-	for _, item := range items {
-		if item == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(items, target)
 }
 
 func removeString(items []string, target string) []string {

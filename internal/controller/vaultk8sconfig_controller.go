@@ -88,9 +88,39 @@ var newVaultSecretEngineClient = func(cfg VaultSecretEngineConfig) (vaultSecretE
 		return nil, fmt.Errorf("failed to initialize Vault client: %w", err)
 	}
 
-	vaultClient.SetToken(cfg.Token)
 	if cfg.Namespace != "" {
 		vaultClient.SetNamespace(cfg.Namespace)
+	}
+
+	// Authenticate using either token or AppRole
+	if cfg.Token != "" {
+		// Direct token authentication
+		vaultClient.SetToken(cfg.Token)
+	} else if cfg.AppRoleRoleID != "" && cfg.AppRoleSecretID != "" {
+		// AppRole authentication using the Logical API
+		mountPath := cfg.AppRoleMountPath
+		if mountPath == "" {
+			mountPath = "approle"
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
+		defer cancel()
+
+		resp, err := vaultClient.Logical().WriteWithContext(ctx, fmt.Sprintf("auth/%s/login", strings.Trim(mountPath, "/")), map[string]any{
+			"role_id":   cfg.AppRoleRoleID,
+			"secret_id": cfg.AppRoleSecretID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to authenticate with AppRole: %w", err)
+		}
+
+		if resp == nil || resp.Auth == nil || resp.Auth.ClientToken == "" {
+			return nil, fmt.Errorf("no token returned from AppRole login")
+		}
+
+		vaultClient.SetToken(resp.Auth.ClientToken)
+	} else {
+		return nil, fmt.Errorf("neither token nor AppRole credentials provided")
 	}
 
 	return &vaultSecretEngineClient{client: vaultClient, httpClient: clientCfg.HttpClient}, nil
@@ -98,13 +128,16 @@ var newVaultSecretEngineClient = func(cfg VaultSecretEngineConfig) (vaultSecretE
 
 // VaultSecretEngineConfig holds all values required to configure the Vault Kubernetes secret engine.
 type VaultSecretEngineConfig struct {
-	Address        string
-	Namespace      string
-	Token          string
-	MountPath      string
-	KubernetesHost string
-	JWT            string
-	CACert         string
+	Address          string
+	Namespace        string
+	Token            string // Token for direct token authentication
+	AppRoleRoleID    string // AppRole role_id for AppRole authentication
+	AppRoleSecretID  string // AppRole secret_id for AppRole authentication
+	AppRoleMountPath string // Mount path for AppRole auth method
+	MountPath        string
+	KubernetesHost   string
+	JWT              string
+	CACert           string
 }
 
 // VaultK8sConfigReconciler reconciles a VaultK8sConfig object
@@ -293,14 +326,46 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 ) (VaultSecretEngineConfig, error) {
 	useManagedClusterCredentials := false
 
-	vaultToken, err := r.getSecretValue(
-		ctx,
-		resource.Namespace,
-		resource.Spec.Auth.TokenSecretRef.Name,
-		resource.Spec.Auth.TokenSecretRef.Key,
-	)
-	if err != nil {
-		return VaultSecretEngineConfig{}, fmt.Errorf("vault token secret reference is invalid: %w", err)
+	// Extract Vault authentication credentials (token or AppRole)
+	var vaultToken, appRoleRoleID, appRoleSecretID, appRoleMountPath string
+
+	if resource.Spec.Auth.TokenSecretRef != nil {
+		// Token authentication
+		token, err := r.getSecretValue(
+			ctx,
+			resource.Namespace,
+			resource.Spec.Auth.TokenSecretRef.Name,
+			resource.Spec.Auth.TokenSecretRef.Key,
+		)
+		if err != nil {
+			return VaultSecretEngineConfig{}, fmt.Errorf("vault token secret reference is invalid: %w", err)
+		}
+		vaultToken = token
+	} else if resource.Spec.Auth.AppRoleAuth != nil {
+		// AppRole authentication
+		roleID := resource.Spec.Auth.AppRoleAuth.RoleId
+		if roleID == "" {
+			return VaultSecretEngineConfig{}, fmt.Errorf("AppRole role_id is required")
+		}
+
+		secretID, err := r.getSecretValue(
+			ctx,
+			resource.Namespace,
+			resource.Spec.Auth.AppRoleAuth.SecretIdSecretRef.Name,
+			resource.Spec.Auth.AppRoleAuth.SecretIdSecretRef.Key,
+		)
+		if err != nil {
+			return VaultSecretEngineConfig{}, fmt.Errorf("AppRole secret_id secret reference is invalid: %w", err)
+		}
+
+		appRoleRoleID = roleID
+		appRoleSecretID = secretID
+		appRoleMountPath = resource.Spec.Auth.AppRoleAuth.MountPath
+		if appRoleMountPath == "" {
+			appRoleMountPath = "approle"
+		}
+	} else {
+		return VaultSecretEngineConfig{}, fmt.Errorf("either tokenSecretRef or AppRoleAuth must be specified in auth")
 	}
 
 	jwtKey := defaultClusterJWTSecretKey
@@ -375,13 +440,16 @@ func (r *VaultK8sConfigReconciler) buildVaultSecretEngineConfig(
 	}
 
 	return VaultSecretEngineConfig{
-		Address:        resource.Spec.VaultAddress,
-		Namespace:      resource.Spec.VaultNamespace,
-		Token:          vaultToken,
-		MountPath:      resource.Spec.Engine.MountPath,
-		KubernetesHost: resource.Spec.Engine.KubernetesHost,
-		JWT:            jwt,
-		CACert:         caCert,
+		Address:          resource.Spec.VaultAddress,
+		Namespace:        resource.Spec.VaultNamespace,
+		Token:            vaultToken,
+		AppRoleRoleID:    appRoleRoleID,
+		AppRoleSecretID:  appRoleSecretID,
+		AppRoleMountPath: appRoleMountPath,
+		MountPath:        resource.Spec.Engine.MountPath,
+		KubernetesHost:   resource.Spec.Engine.KubernetesHost,
+		JWT:              jwt,
+		CACert:           caCert,
 	}, nil
 }
 
@@ -657,17 +725,26 @@ func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Clie
 	normalized := strings.Trim(mountPath, "/")
 	resp, err := vaultClient.Logical().ReadRawWithContext(ctx, normalized+"/config")
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close() // Ignore close errors on read
+		}()
 	}
 	if err != nil {
 		var responseErr *vaultapi.ResponseError
-		if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound {
-			return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		if errors.As(err, &responseErr) {
+			if responseErr.StatusCode == http.StatusNotFound {
+				return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+			}
+			// A 403 means the mount exists but the token lacks read on the config path.
+			// This is sufficient to confirm the mount is present; proceed.
+			if responseErr.StatusCode == http.StatusForbidden {
+				return nil
+			}
 		}
 		return fmt.Errorf("failed to find Vault mount %q: %w", mountPath, err)
 	}
 	if resp != nil && resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("Kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
 	}
 
 	return nil
