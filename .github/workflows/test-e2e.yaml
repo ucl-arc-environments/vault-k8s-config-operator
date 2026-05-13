@@ -1,5 +1,5 @@
 ---
-name: E2E Tests
+name: Run Tests
 
 on:
   push:
@@ -19,7 +19,23 @@ concurrency:
     ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
-  test-e2e:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version: 1.25
+
+      - name: Running Unit Tests
+        run: |
+          go mod tidy
+          make test
+  e2e:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
