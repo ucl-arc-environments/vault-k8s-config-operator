@@ -111,7 +111,10 @@ var newVaultSecretEngineClient = func(cfg VaultSecretEngineConfig) (vaultSecretE
 			"secret_id": cfg.AppRoleSecretID,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to authenticate with AppRole: %w", err)
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, fmt.Errorf("failed to authenticate with AppRole: timeout after %s calling %q on %q: %w", vaultClientRequestTimeout, authPath, cfg.Address, err)
+			}
+			return nil, fmt.Errorf("failed to authenticate with AppRole calling %q on %q: %w", authPath, cfg.Address, err)
 		}
 
 		if resp == nil || resp.Auth == nil || resp.Auth.ClientToken == "" {
