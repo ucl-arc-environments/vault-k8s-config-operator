@@ -102,13 +102,24 @@ var newVaultSecretEngineClient = func(cfg VaultSecretEngineConfig) (vaultSecretE
 		if mountPath == "" {
 			mountPath = "approle"
 		}
+		trimmedMountPath := strings.Trim(mountPath, "/")
+		authPath := fmt.Sprintf("auth/%s/login", trimmedMountPath)
 
-		ctx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
-		defer cancel()
+		var resp *vaultapi.Secret
+		err = withRetry(context.Background(), fmt.Sprintf("authenticate with AppRole using %q", authPath), func() error {
+			attemptCtx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
+			defer cancel()
 
-		resp, err := vaultClient.Logical().WriteWithContext(ctx, fmt.Sprintf("auth/%s/login", strings.Trim(mountPath, "/")), map[string]any{
-			"role_id":   cfg.AppRoleRoleID,
-			"secret_id": cfg.AppRoleSecretID,
+			attemptResp, attemptErr := vaultClient.Logical().WriteWithContext(attemptCtx, authPath, map[string]any{
+				"role_id":   cfg.AppRoleRoleID,
+				"secret_id": cfg.AppRoleSecretID,
+			})
+			if attemptErr != nil {
+				return attemptErr
+			}
+
+			resp = attemptResp
+			return nil
 		})
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
