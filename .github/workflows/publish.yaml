@@ -57,7 +57,7 @@ jobs:
           env.REGISTRY }} --username ${{ github.actor }}
           --password-stdin
 
-      - name: Package and push experimental channel chart
+      - name: Package and push chart
         working-directory: ./dist/chart
         run: |
           helm dependency build
