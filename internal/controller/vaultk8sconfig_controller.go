@@ -47,7 +47,7 @@ const (
 	successRequeueDelay           = 5 * time.Minute
 	defaultClusterJWTSecretKey    = "token"
 	defaultClusterCACertSecretKey = "ca.crt"
-	vaultClientRequestTimeout     = 10 * time.Second
+	vaultClientRequestTimeout     = 30 * time.Second
 	vaultOperationMaxAttempts     = 3
 	vaultOperationBaseBackoff     = time.Second
 
