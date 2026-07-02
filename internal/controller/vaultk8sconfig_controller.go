@@ -106,8 +106,9 @@ var newVaultSecretEngineClient = func(cfg VaultSecretEngineConfig) (vaultSecretE
 		authPath := fmt.Sprintf("auth/%s/login", trimmedMountPath)
 
 		var resp *vaultapi.Secret
-		// Use a child context with its own timeout to avoid blocking indefinitely on retries
-		retryCtx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout*time.Duration(vaultOperationMaxAttempts)+30*time.Second)
+		// Use a child context with its own timeout to avoid blocking indefinitely on retries.
+		// Account for: 3 attempts × 30s timeout + 1s + 2s backoff + overhead = ~3 minutes
+		retryCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		err = withRetry(retryCtx, fmt.Sprintf("authenticate with AppRole using %q", authPath), func() error {
 			attemptCtx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
@@ -841,8 +842,13 @@ func isRetryableVaultError(err error) bool {
 		return false
 	}
 
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) {
 		return false
+	}
+
+	// Treat deadline exceeded (timeouts) as retryable since Vault may just be slow
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
 
 	var responseErr *vaultapi.ResponseError
