@@ -189,6 +189,7 @@ type VaultK8sConfigReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.1/pkg/reconcile
 func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithValues("vaultK8sConfig", req.String())
+	log.Info("Starting reconciliation")
 
 	resource := &v1.VaultK8sConfig{}
 	if err := r.Get(ctx, req.NamespacedName, resource); err != nil {
@@ -199,6 +200,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if !resource.DeletionTimestamp.IsZero() {
+		log.Info("Reconciling deletion")
 		if err := r.reconcileDelete(ctx, resource); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -218,6 +220,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
+	log.Info("Building Vault configuration")
 	vaultConfig, err := r.buildVaultSecretEngineConfig(ctx, resource)
 	if err != nil {
 		log.Error(err, "Failed to build Vault configuration inputs")
@@ -233,6 +236,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		configure = configureVaultSecretEngine
 	}
 
+	log.Info("Configuring Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath, "vaultAddress", vaultConfig.Address)
 	if err := configure(ctx, vaultConfig); err != nil {
 		log.Error(err, "Failed to configure Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
@@ -241,6 +245,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
 	}
 
+	log.Info("Successfully configured Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
 	if err := r.markReady(ctx, resource); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -728,7 +733,9 @@ func (c *vaultSecretEngineClient) WriteKubernetesSecretEngineConfig(
 	jwt string,
 	caCert string,
 ) error {
-	if _, err := c.client.Logical().Write(strings.Trim(mountPath, "/")+"/config", map[string]any{
+	ctx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
+	defer cancel()
+	if _, err := c.client.Logical().WriteWithContext(ctx, strings.Trim(mountPath, "/")+"/config", map[string]any{
 		"kubernetes_host":     kubernetesHost,
 		"service_account_jwt": jwt,
 		"kubernetes_ca_cert":  caCert,
