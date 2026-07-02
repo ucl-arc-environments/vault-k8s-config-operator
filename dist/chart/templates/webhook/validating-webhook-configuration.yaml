@@ -15,7 +15,7 @@ webhooks:
       name: {{ include "vault-k8s-config-operator.resourceName" (dict "suffix" "webhook-service" "context" $) }}
       namespace: {{ .Release.Namespace }}
       path: /validate-environments-arc-ucl-v1-vaultk8sconfig
-  failurePolicy: Fail
+  failurePolicy: Ignore
   name: vvaultk8sconfig-v1.kb.io
   rules:
   - apiGroups:

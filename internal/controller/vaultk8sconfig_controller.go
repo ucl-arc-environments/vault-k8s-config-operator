@@ -47,7 +47,7 @@ const (
 	successRequeueDelay           = 5 * time.Minute
 	defaultClusterJWTSecretKey    = "token"
 	defaultClusterCACertSecretKey = "ca.crt"
-	vaultClientRequestTimeout     = 10 * time.Second
+	vaultClientRequestTimeout     = 30 * time.Second
 	vaultOperationMaxAttempts     = 3
 	vaultOperationBaseBackoff     = time.Second
 
@@ -102,16 +102,34 @@ var newVaultSecretEngineClient = func(cfg VaultSecretEngineConfig) (vaultSecretE
 		if mountPath == "" {
 			mountPath = "approle"
 		}
+		trimmedMountPath := strings.Trim(mountPath, "/")
+		authPath := fmt.Sprintf("auth/%s/login", trimmedMountPath)
 
-		ctx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
+		var resp *vaultapi.Secret
+		// Use a child context with its own timeout to avoid blocking indefinitely on retries.
+		// Account for: 3 attempts × 30s timeout + 1s + 2s backoff + overhead = ~3 minutes
+		retryCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
+		err = withRetry(retryCtx, fmt.Sprintf("authenticate with AppRole using %q", authPath), func() error {
+			attemptCtx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
+			defer cancel()
 
-		resp, err := vaultClient.Logical().WriteWithContext(ctx, fmt.Sprintf("auth/%s/login", strings.Trim(mountPath, "/")), map[string]any{
-			"role_id":   cfg.AppRoleRoleID,
-			"secret_id": cfg.AppRoleSecretID,
+			attemptResp, attemptErr := vaultClient.Logical().WriteWithContext(attemptCtx, authPath, map[string]any{
+				"role_id":   cfg.AppRoleRoleID,
+				"secret_id": cfg.AppRoleSecretID,
+			})
+			if attemptErr != nil {
+				return attemptErr
+			}
+
+			resp = attemptResp
+			return nil
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to authenticate with AppRole: %w", err)
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, fmt.Errorf("failed to authenticate with AppRole: timeout after %s calling %q on %q: %w", vaultClientRequestTimeout, authPath, cfg.Address, err)
+			}
+			return nil, fmt.Errorf("failed to authenticate with AppRole calling %q on %q: %w", authPath, cfg.Address, err)
 		}
 
 		if resp == nil || resp.Auth == nil || resp.Auth.ClientToken == "" {
@@ -171,6 +189,7 @@ type VaultK8sConfigReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.1/pkg/reconcile
 func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithValues("vaultK8sConfig", req.String())
+	log.Info("Starting reconciliation")
 
 	resource := &v1.VaultK8sConfig{}
 	if err := r.Get(ctx, req.NamespacedName, resource); err != nil {
@@ -181,6 +200,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if !resource.DeletionTimestamp.IsZero() {
+		log.Info("Reconciling deletion")
 		if err := r.reconcileDelete(ctx, resource); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -200,6 +220,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
+	log.Info("Building Vault configuration")
 	vaultConfig, err := r.buildVaultSecretEngineConfig(ctx, resource)
 	if err != nil {
 		log.Error(err, "Failed to build Vault configuration inputs")
@@ -215,6 +236,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		configure = configureVaultSecretEngine
 	}
 
+	log.Info("Configuring Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath, "vaultAddress", vaultConfig.Address)
 	if err := configure(ctx, vaultConfig); err != nil {
 		log.Error(err, "Failed to configure Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
@@ -223,6 +245,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
 	}
 
+	log.Info("Successfully configured Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
 	if err := r.markReady(ctx, resource); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -710,7 +733,9 @@ func (c *vaultSecretEngineClient) WriteKubernetesSecretEngineConfig(
 	jwt string,
 	caCert string,
 ) error {
-	if _, err := c.client.Logical().Write(strings.Trim(mountPath, "/")+"/config", map[string]any{
+	ctx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
+	defer cancel()
+	if _, err := c.client.Logical().WriteWithContext(ctx, strings.Trim(mountPath, "/")+"/config", map[string]any{
 		"kubernetes_host":     kubernetesHost,
 		"service_account_jwt": jwt,
 		"kubernetes_ca_cert":  caCert,
@@ -824,8 +849,13 @@ func isRetryableVaultError(err error) bool {
 		return false
 	}
 
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) {
 		return false
+	}
+
+	// Treat deadline exceeded (timeouts) as retryable since Vault may just be slow
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
 
 	var responseErr *vaultapi.ResponseError

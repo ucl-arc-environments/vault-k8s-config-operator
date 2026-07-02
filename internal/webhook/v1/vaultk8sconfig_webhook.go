@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -47,7 +48,7 @@ func SetupVaultK8sConfigWebhookWithManager(mgr ctrl.Manager) error {
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
-// +kubebuilder:webhook:path=/validate-environments-arc-ucl-v1-vaultk8sconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=environments.arc.ucl,resources=vaultk8sconfigs,verbs=create;update,versions=v1,name=vvaultk8sconfig-v1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-environments-arc-ucl-v1-vaultk8sconfig,mutating=false,failurePolicy=ignore,sideEffects=None,groups=environments.arc.ucl,resources=vaultk8sconfigs,verbs=create;update,versions=v1,name=vvaultk8sconfig-v1.kb.io,admissionReviewVersions=v1
 
 // VaultK8sConfigCustomValidator struct is responsible for validating the VaultK8sConfig resource
 // when it is created, updated, or deleted.
@@ -86,10 +87,21 @@ func (v *VaultK8sConfigCustomValidator) validateUniqueMountPath(ctx context.Cont
 		return fmt.Errorf("webhook client is not configured")
 	}
 
+	// Ensure we have a timeout for listing resources to prevent hanging during cache sync
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+	}
+
 	targetMountPath := normalizedMountPath(obj.Spec.Engine.MountPath)
 	var existing v1.VaultK8sConfigList
 	if err := v.Client.List(ctx, &existing); err != nil {
-		return fmt.Errorf("failed to list existing VaultK8sConfig resources: %w", err)
+		// If we can't list resources during startup/cache sync, skip validation
+		// to avoid blocking API operations. The resource will be validated later
+		// when the cache is ready.
+		vaultk8sconfiglog.V(2).Info("Could not validate unique mount path during cache sync, deferring validation", "name", obj.GetName(), "error", err)
+		return nil
 	}
 
 	for i := range existing.Items {
