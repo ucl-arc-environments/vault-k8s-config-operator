@@ -97,7 +97,11 @@ func (v *VaultK8sConfigCustomValidator) validateUniqueMountPath(ctx context.Cont
 	targetMountPath := normalizedMountPath(obj.Spec.Engine.MountPath)
 	var existing v1.VaultK8sConfigList
 	if err := v.Client.List(ctx, &existing); err != nil {
-		return fmt.Errorf("failed to list existing VaultK8sConfig resources: %w", err)
+		// If we can't list resources during startup/cache sync, skip validation
+		// to avoid blocking API operations. The resource will be validated later
+		// when the cache is ready.
+		vaultk8sconfiglog.V(2).Info("Could not validate unique mount path during cache sync, deferring validation", "name", obj.GetName(), "error", err)
+		return nil
 	}
 
 	for i := range existing.Items {
