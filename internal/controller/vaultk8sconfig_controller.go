@@ -106,7 +106,10 @@ var newVaultSecretEngineClient = func(cfg VaultSecretEngineConfig) (vaultSecretE
 		authPath := fmt.Sprintf("auth/%s/login", trimmedMountPath)
 
 		var resp *vaultapi.Secret
-		err = withRetry(context.Background(), fmt.Sprintf("authenticate with AppRole using %q", authPath), func() error {
+		// Use a child context with its own timeout to avoid blocking indefinitely on retries
+		retryCtx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout*time.Duration(vaultOperationMaxAttempts)+30*time.Second)
+		defer cancel()
+		err = withRetry(retryCtx, fmt.Sprintf("authenticate with AppRole using %q", authPath), func() error {
 			attemptCtx, cancel := context.WithTimeout(context.Background(), vaultClientRequestTimeout)
 			defer cancel()
 
