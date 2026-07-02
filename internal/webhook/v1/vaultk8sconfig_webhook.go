@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -84,6 +85,13 @@ func (v *VaultK8sConfigCustomValidator) ValidateDelete(_ context.Context, obj *v
 func (v *VaultK8sConfigCustomValidator) validateUniqueMountPath(ctx context.Context, obj *v1.VaultK8sConfig) error {
 	if v.Client == nil {
 		return fmt.Errorf("webhook client is not configured")
+	}
+
+	// Ensure we have a timeout for listing resources to prevent hanging during cache sync
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
 	}
 
 	targetMountPath := normalizedMountPath(obj.Spec.Engine.MountPath)
