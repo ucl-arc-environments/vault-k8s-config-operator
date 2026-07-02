@@ -713,7 +713,7 @@ webhooks:
       name: vault-k8s-config-operator-webhook-service
       namespace: vault-k8s-config-operator-system
       path: /validate-environments-arc-ucl-v1-vaultk8sconfig
-  failurePolicy: Fail
+  failurePolicy: Ignore
   name: vvaultk8sconfig-v1.kb.io
   rules:
   - apiGroups:
