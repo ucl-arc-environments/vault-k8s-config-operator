@@ -238,10 +238,12 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	log.Info("Configuring Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath, "vaultAddress", vaultConfig.Address)
 	if err := configure(ctx, vaultConfig); err != nil {
-		log.Error(err, "Failed to configure Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
+		log.Error(err, "Failed to configure Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath, "vaultAddress", vaultConfig.Address)
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
+			log.Error(markErr, "Failed to mark resource as failed - returning error to trigger requeue")
 			return ctrl.Result{}, markErr
 		}
+		log.Info("Requeuing reconciliation after failure", "nextRetryAfter", defaultRequeueDelay)
 		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
 	}
 
@@ -674,33 +676,41 @@ func configureVaultSecretEngine(ctx context.Context, cfg VaultSecretEngineConfig
 	log := logf.FromContext(ctx)
 	vaultClient, err := newVaultSecretEngineClient(cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Vault client for %q: %w", cfg.Address, err)
 	}
 	// Each reconcile creates a new client and HTTP transport. Explicitly close idle
 	// connections so the transport and its goroutines can be GC'd immediately.
-	defer vaultClient.CloseIdleConnections()
+	defer func() {
+		vaultClient.CloseIdleConnections()
+		log.V(2).Info("Closed idle Vault client connections")
+	}()
 
+	log.V(1).Info("Verifying Kubernetes secret engine mount", "mountPath", cfg.MountPath)
 	if err := withRetry(ctx, "verify Kubernetes secret engine mount", func() error {
 		return vaultClient.VerifyKubernetesEngineMount(ctx, cfg.MountPath)
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to verify mount %q at %q: %w", cfg.MountPath, cfg.Address, err)
 	}
 
 	driftDetected := false
 	if currentConfig, err := vaultClient.ReadKubernetesSecretEngineConfig(ctx, cfg.MountPath); err == nil {
 		driftDetected = hasKubernetesSecretEngineDrift(currentConfig, cfg)
+	} else {
+		log.V(1).Info("Could not read current config (may be uninitialized)", "error", err)
 	}
 
+	log.V(1).Info("Writing Kubernetes secret engine configuration", "mountPath", cfg.MountPath)
 	if err := withRetry(ctx, "write Kubernetes secret engine config", func() error {
 		return vaultClient.WriteKubernetesSecretEngineConfig(cfg.MountPath, cfg.KubernetesHost, cfg.JWT, cfg.CACert)
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to write Kubernetes secret engine config to %q at %q: %w", cfg.MountPath, cfg.Address, err)
 	}
 
 	if driftDetected {
 		log.Info("Corrected Vault Kubernetes secret engine drift", "mountPath", cfg.MountPath)
 	}
 
+	log.V(1).Info("Successfully configured Vault Kubernetes secret engine", "mountPath", cfg.MountPath)
 	return nil
 }
 
@@ -955,8 +965,12 @@ func (r *VaultK8sConfigReconciler) markFailed(
 	resource *v1.VaultK8sConfig,
 	reconcileErr error,
 ) error {
+	log := logf.FromContext(ctx)
+	log.Info("Attempting to mark resource as failed")
+
 	latest := &v1.VaultK8sConfig{}
 	if err := r.Get(ctx, types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}, latest); err != nil {
+		log.Error(err, "Failed to get latest resource for status update")
 		return err
 	}
 
@@ -971,7 +985,13 @@ func (r *VaultK8sConfigReconciler) markFailed(
 		LastTransitionTime: metav1.Now(),
 	})
 
-	return r.Status().Patch(ctx, latest, client.MergeFrom(base))
+	if err := r.Status().Patch(ctx, latest, client.MergeFrom(base)); err != nil {
+		log.Error(err, "Failed to patch status after reconciliation failure")
+		return err
+	}
+
+	log.Info("Successfully marked resource as failed")
+	return nil
 }
 
 func setCondition(conditions []metav1.Condition, next metav1.Condition) []metav1.Condition {
