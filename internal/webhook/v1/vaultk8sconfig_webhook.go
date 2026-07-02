@@ -47,7 +47,7 @@ func SetupVaultK8sConfigWebhookWithManager(mgr ctrl.Manager) error {
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
-// +kubebuilder:webhook:path=/validate-environments-arc-ucl-v1-vaultk8sconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=environments.arc.ucl,resources=vaultk8sconfigs,verbs=create;update,versions=v1,name=vvaultk8sconfig-v1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-environments-arc-ucl-v1-vaultk8sconfig,mutating=false,failurePolicy=ignore,sideEffects=None,groups=environments.arc.ucl,resources=vaultk8sconfigs,verbs=create;update,versions=v1,name=vvaultk8sconfig-v1.kb.io,admissionReviewVersions=v1
 
 // VaultK8sConfigCustomValidator struct is responsible for validating the VaultK8sConfig resource
 // when it is created, updated, or deleted.
