@@ -173,7 +173,8 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(defaultRequeueDelay))
+			// "not found" errors are permanent (mount misconfiguration), so use permanentErrorRequeueDelay
+			Expect(result.RequeueAfter).To(Equal(permanentErrorRequeueDelay))
 
 			current := &v1.VaultK8sConfig{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, current)).To(Succeed())
