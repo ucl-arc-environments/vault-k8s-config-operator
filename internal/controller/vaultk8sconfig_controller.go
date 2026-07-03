@@ -225,7 +225,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err != nil {
 		log.Error(err, "Failed to build Vault configuration inputs")
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
-			return ctrl.Result{}, markErr
+			log.Error(markErr, "Failed to update resource status but continuing with requeue delay")
 		}
 		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
 	}
@@ -240,8 +240,7 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err := configure(ctx, vaultConfig); err != nil {
 		log.Error(err, "Failed to configure Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath, "vaultAddress", vaultConfig.Address)
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
-			log.Error(markErr, "Failed to mark resource as failed - returning error to trigger requeue")
-			return ctrl.Result{}, markErr
+			log.Error(markErr, "Failed to update resource status but continuing with requeue delay")
 		}
 		log.Info("Requeuing reconciliation after failure", "nextRetryAfter", defaultRequeueDelay)
 		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
