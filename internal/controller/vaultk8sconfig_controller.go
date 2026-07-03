@@ -52,8 +52,8 @@ const (
 	vaultOperationBaseBackoff     = time.Second
 
 	// Longer delays for non-transient errors
-	permanentErrorRequeueDelay    = 15 * time.Minute  // 403, invalid config, etc.
-	transientErrorRequeueDelay    = time.Minute        // Timeout, 5xx, etc.
+	permanentErrorRequeueDelay = 15 * time.Minute // 403, invalid config, etc.
+	transientErrorRequeueDelay = time.Minute      // Timeout, 5xx, etc.
 
 	conditionTypeReady         = "Ready"
 	conditionReasonReconciling = "Reconciling"
