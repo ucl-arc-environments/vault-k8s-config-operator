@@ -51,6 +51,10 @@ const (
 	vaultOperationMaxAttempts     = 3
 	vaultOperationBaseBackoff     = time.Second
 
+	// Longer delays for non-transient errors
+	permanentErrorRequeueDelay    = 15 * time.Minute  // 403, invalid config, etc.
+	transientErrorRequeueDelay    = time.Minute        // Timeout, 5xx, etc.
+
 	conditionTypeReady         = "Ready"
 	conditionReasonReconciling = "Reconciling"
 	conditionReasonReady       = "Configured"
@@ -227,7 +231,9 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
 			log.Error(markErr, "Failed to update resource status, will retry on next cycle")
 		}
-		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
+		requeueDelay := classifyError(err)
+		log.Info("Requeuing reconciliation after configuration build failure", "nextRetryAfter", requeueDelay.String())
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
 	configure := r.ConfigureSecretEngine
@@ -242,8 +248,9 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
 			log.Error(markErr, "Failed to update resource status, will retry on next cycle")
 		}
-		log.Info("Requeuing reconciliation after failure", "nextRetryAfter", defaultRequeueDelay)
-		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
+		requeueDelay := classifyError(err)
+		log.Info("Requeuing reconciliation after failure", "nextRetryAfter", requeueDelay.String())
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
 	log.Info("Successfully configured Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
@@ -1037,4 +1044,27 @@ func (r *VaultK8sConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1.VaultK8sConfig{}).
 		Named("vaultk8sconfig").
 		Complete(r)
+}
+
+// classifyError determines the appropriate requeue delay based on error type.
+// Permanent errors (403, invalid config) get longer delays to avoid hammering Vault.
+// Transient errors (timeouts, 5xx) get standard delays.
+func classifyError(err error) time.Duration {
+	errStr := err.Error()
+
+	// Permission denied (403) - likely permanent, use long delay
+	if strings.Contains(errStr, "Code: 403") || strings.Contains(errStr, "permission denied") {
+		return permanentErrorRequeueDelay
+	}
+
+	// Vault-specific permanent errors
+	if strings.Contains(errStr, "invalid mount") ||
+		strings.Contains(errStr, "unsupported path") ||
+		strings.Contains(errStr, "already exists") ||
+		strings.Contains(errStr, "invalid auth method") {
+		return permanentErrorRequeueDelay
+	}
+
+	// Default to transient error handling
+	return transientErrorRequeueDelay
 }
