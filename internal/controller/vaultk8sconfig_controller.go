@@ -1060,6 +1060,7 @@ func classifyError(err error) time.Duration {
 	// Vault-specific permanent errors
 	if strings.Contains(errStr, "invalid mount") ||
 		strings.Contains(errStr, "unsupported path") ||
+		strings.Contains(errStr, "not found") ||
 		strings.Contains(errStr, "already exists") ||
 		strings.Contains(errStr, "invalid auth method") {
 		return permanentErrorRequeueDelay
