@@ -973,6 +973,17 @@ func (r *VaultK8sConfigReconciler) markFailed(
 		return err
 	}
 
+	// Skip status update if already failed with the same generation.
+	// This prevents cascading watch events that cause immediate re-queuing.
+	failedCondition := findCondition(latest.Status.Conditions, conditionTypeReady)
+	if failedCondition != nil &&
+		failedCondition.Status == metav1.ConditionFalse &&
+		failedCondition.Reason == conditionReasonFailed &&
+		failedCondition.ObservedGeneration == latest.Generation {
+		log.Info("Resource already marked as failed for current generation, skipping status update")
+		return nil
+	}
+
 	base := latest.DeepCopy()
 	latest.Status.ObservedGeneration = latest.Generation
 	latest.Status.Conditions = setCondition(latest.Status.Conditions, metav1.Condition{
