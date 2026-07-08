@@ -773,8 +773,11 @@ func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Clie
 	if err != nil {
 		var responseErr *vaultapi.ResponseError
 		if errors.As(err, &responseErr) {
+			// A 404 on /config is expected for new/uninitialized mounts.
+			// It doesn't mean the mount doesn't exist; the write operation will fail
+			// with a clearer error if the mount is truly invalid.
 			if responseErr.StatusCode == http.StatusNotFound {
-				return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+				return nil
 			}
 			// A 403 means the mount exists but the token lacks read on the config path.
 			// This is sufficient to confirm the mount is present; proceed.
@@ -785,7 +788,7 @@ func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Clie
 		return fmt.Errorf("failed to find Vault mount %q: %w", mountPath, err)
 	}
 	if resp != nil && resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		return nil
 	}
 
 	return nil
