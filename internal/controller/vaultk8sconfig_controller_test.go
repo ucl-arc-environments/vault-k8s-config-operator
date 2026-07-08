@@ -165,7 +165,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 				ConfigureSecretEngine: func(context.Context, VaultSecretEngineConfig) error {
-					return fmt.Errorf("Kubernetes secret engine mount %q not found", "kubernetes")
+					return fmt.Errorf(`failed to write Kubernetes secret engine config to "kubernetes" at "https://vault.example.com": Code: 404. Errors: unsupported path`)
 				},
 			}
 
@@ -173,7 +173,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// "not found" errors are permanent (mount misconfiguration), so use permanentErrorRequeueDelay
+			// 404/unsupported path errors are permanent (mount misconfiguration), so use permanentErrorRequeueDelay
 			Expect(result.RequeueAfter).To(Equal(permanentErrorRequeueDelay))
 
 			current := &v1.VaultK8sConfig{}
@@ -182,7 +182,7 @@ var _ = Describe("VaultK8sConfig Controller", func() {
 			Expect(readyCondition).NotTo(BeNil())
 			Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
 			Expect(readyCondition.Reason).To(Equal(conditionReasonFailed))
-			Expect(readyCondition.Message).To(ContainSubstring(`mount "kubernetes" not found`))
+			Expect(readyCondition.Message).To(ContainSubstring(`Code: 404`))
 		})
 	})
 

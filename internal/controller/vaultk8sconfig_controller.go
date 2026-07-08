@@ -1055,15 +1055,10 @@ func (r *VaultK8sConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func classifyError(err error) time.Duration {
 	errStr := err.Error()
 
-	// Permission denied (403) - likely permanent, use long delay
-	if strings.Contains(errStr, "Code: 403") || strings.Contains(errStr, "permission denied") {
-		return permanentErrorRequeueDelay
-	}
-
-	// Vault-specific permanent errors
-	if strings.Contains(errStr, "invalid mount") ||
-		strings.Contains(errStr, "unsupported path") ||
-		strings.Contains(errStr, "not found") ||
+	// Permanent misconfiguration errors - back off for longer to avoid hammering Vault.
+	if strings.Contains(errStr, "Code: 403") ||
+		strings.Contains(errStr, "Code: 404") ||
+		strings.Contains(errStr, "invalid mount") ||
 		strings.Contains(errStr, "already exists") ||
 		strings.Contains(errStr, "invalid auth method") {
 		return permanentErrorRequeueDelay
