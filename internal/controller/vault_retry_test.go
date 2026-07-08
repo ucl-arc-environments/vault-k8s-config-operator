@@ -119,10 +119,16 @@ func TestVerifyKubernetesEngineMount_ReadsMountPathDirectly(t *testing.T) {
 	}
 }
 
-func TestVerifyKubernetesEngineMount_ReturnsNotFoundForMissingMount(t *testing.T) {
+func TestVerifyKubernetesEngineMount_AcceptsUninitializedMount(t *testing.T) {
 	t.Parallel()
 
+	// Mock server that returns 404 on config read (mount exists but no config yet)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.TrimSuffix(r.URL.Path, "/") == "/v1/kubernetes/config" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errors":["no value found at kubernetes/config"]}`))
+			return
+		}
 		http.NotFound(w, r)
 	}))
 	defer server.Close()
@@ -137,12 +143,9 @@ func TestVerifyKubernetesEngineMount_ReturnsNotFoundForMissingMount(t *testing.T
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	err = verifyKubernetesEngineMount(ctx, vaultClient, "missing-mount")
-	if err == nil {
-		t.Fatal("expected error for missing mount, got nil")
-	}
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, `kubernetes secret engine mount "missing-mount" not found`) {
-		t.Fatalf("expected not found message, got %q", err.Error())
+	// Should succeed - 404 on config read means mount exists but is uninitialized
+	err = verifyKubernetesEngineMount(ctx, vaultClient, "kubernetes")
+	if err != nil {
+		t.Fatalf("expected success for uninitialized mount, got error: %v", err)
 	}
 }

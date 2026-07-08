@@ -51,6 +51,10 @@ const (
 	vaultOperationMaxAttempts     = 3
 	vaultOperationBaseBackoff     = time.Second
 
+	// Longer delays for non-transient errors
+	permanentErrorRequeueDelay = 15 * time.Minute // 403, invalid config, etc.
+	transientErrorRequeueDelay = time.Minute      // Timeout, 5xx, etc.
+
 	conditionTypeReady         = "Ready"
 	conditionReasonReconciling = "Reconciling"
 	conditionReasonReady       = "Configured"
@@ -225,9 +229,11 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err != nil {
 		log.Error(err, "Failed to build Vault configuration inputs")
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
-			return ctrl.Result{}, markErr
+			log.Error(markErr, "Failed to update resource status, will retry on next cycle")
 		}
-		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
+		requeueDelay := classifyError(err)
+		log.Info("Requeuing reconciliation after configuration build failure", "nextRetryAfter", requeueDelay.String())
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
 	configure := r.ConfigureSecretEngine
@@ -238,11 +244,13 @@ func (r *VaultK8sConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	log.Info("Configuring Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath, "vaultAddress", vaultConfig.Address)
 	if err := configure(ctx, vaultConfig); err != nil {
-		log.Error(err, "Failed to configure Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
+		log.Error(err, "Failed to configure Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath, "vaultAddress", vaultConfig.Address)
 		if markErr := r.markFailed(ctx, resource, err); markErr != nil {
-			return ctrl.Result{}, markErr
+			log.Error(markErr, "Failed to update resource status, will retry on next cycle")
 		}
-		return ctrl.Result{RequeueAfter: defaultRequeueDelay}, nil
+		requeueDelay := classifyError(err)
+		log.Info("Requeuing reconciliation after failure", "nextRetryAfter", requeueDelay.String())
+		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
 	log.Info("Successfully configured Vault Kubernetes secret engine", "mountPath", vaultConfig.MountPath)
@@ -674,33 +682,41 @@ func configureVaultSecretEngine(ctx context.Context, cfg VaultSecretEngineConfig
 	log := logf.FromContext(ctx)
 	vaultClient, err := newVaultSecretEngineClient(cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Vault client for %q: %w", cfg.Address, err)
 	}
 	// Each reconcile creates a new client and HTTP transport. Explicitly close idle
 	// connections so the transport and its goroutines can be GC'd immediately.
-	defer vaultClient.CloseIdleConnections()
+	defer func() {
+		vaultClient.CloseIdleConnections()
+		log.V(2).Info("Closed idle Vault client connections")
+	}()
 
+	log.V(1).Info("Verifying Kubernetes secret engine mount", "mountPath", cfg.MountPath)
 	if err := withRetry(ctx, "verify Kubernetes secret engine mount", func() error {
 		return vaultClient.VerifyKubernetesEngineMount(ctx, cfg.MountPath)
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to verify mount %q at %q: %w", cfg.MountPath, cfg.Address, err)
 	}
 
 	driftDetected := false
 	if currentConfig, err := vaultClient.ReadKubernetesSecretEngineConfig(ctx, cfg.MountPath); err == nil {
 		driftDetected = hasKubernetesSecretEngineDrift(currentConfig, cfg)
+	} else {
+		log.V(1).Info("Could not read current config (may be uninitialized)", "error", err)
 	}
 
+	log.V(1).Info("Writing Kubernetes secret engine configuration", "mountPath", cfg.MountPath)
 	if err := withRetry(ctx, "write Kubernetes secret engine config", func() error {
 		return vaultClient.WriteKubernetesSecretEngineConfig(cfg.MountPath, cfg.KubernetesHost, cfg.JWT, cfg.CACert)
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to write Kubernetes secret engine config to %q at %q: %w", cfg.MountPath, cfg.Address, err)
 	}
 
 	if driftDetected {
 		log.Info("Corrected Vault Kubernetes secret engine drift", "mountPath", cfg.MountPath)
 	}
 
+	log.V(1).Info("Successfully configured Vault Kubernetes secret engine", "mountPath", cfg.MountPath)
 	return nil
 }
 
@@ -757,8 +773,11 @@ func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Clie
 	if err != nil {
 		var responseErr *vaultapi.ResponseError
 		if errors.As(err, &responseErr) {
+			// A 404 on /config is expected for new/uninitialized mounts.
+			// It doesn't mean the mount doesn't exist; the write operation will fail
+			// with a clearer error if the mount is truly invalid.
 			if responseErr.StatusCode == http.StatusNotFound {
-				return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+				return nil
 			}
 			// A 403 means the mount exists but the token lacks read on the config path.
 			// This is sufficient to confirm the mount is present; proceed.
@@ -769,7 +788,7 @@ func verifyKubernetesEngineMount(ctx context.Context, vaultClient *vaultapi.Clie
 		return fmt.Errorf("failed to find Vault mount %q: %w", mountPath, err)
 	}
 	if resp != nil && resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("kubernetes secret engine mount %q not found; ensure it is pre-configured in Vault", mountPath)
+		return nil
 	}
 
 	return nil
@@ -955,9 +974,24 @@ func (r *VaultK8sConfigReconciler) markFailed(
 	resource *v1.VaultK8sConfig,
 	reconcileErr error,
 ) error {
+	log := logf.FromContext(ctx)
+	log.Info("Attempting to mark resource as failed")
+
 	latest := &v1.VaultK8sConfig{}
 	if err := r.Get(ctx, types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}, latest); err != nil {
+		log.Error(err, "Failed to get latest resource for status update")
 		return err
+	}
+
+	// Skip status update if already failed with the same generation.
+	// This prevents cascading watch events that cause immediate re-queuing.
+	failedCondition := findCondition(latest.Status.Conditions, conditionTypeReady)
+	if failedCondition != nil &&
+		failedCondition.Status == metav1.ConditionFalse &&
+		failedCondition.Reason == conditionReasonFailed &&
+		failedCondition.ObservedGeneration == latest.Generation {
+		log.Info("Resource already marked as failed for current generation, skipping status update")
+		return nil
 	}
 
 	base := latest.DeepCopy()
@@ -971,7 +1005,13 @@ func (r *VaultK8sConfigReconciler) markFailed(
 		LastTransitionTime: metav1.Now(),
 	})
 
-	return r.Status().Patch(ctx, latest, client.MergeFrom(base))
+	if err := r.Status().Patch(ctx, latest, client.MergeFrom(base)); err != nil {
+		log.Error(err, "Failed to patch status after reconciliation failure")
+		return err
+	}
+
+	log.Info("Successfully marked resource as failed")
+	return nil
 }
 
 func setCondition(conditions []metav1.Condition, next metav1.Condition) []metav1.Condition {
@@ -1007,4 +1047,23 @@ func (r *VaultK8sConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1.VaultK8sConfig{}).
 		Named("vaultk8sconfig").
 		Complete(r)
+}
+
+// classifyError determines the appropriate requeue delay based on error type.
+// Permanent errors (403, invalid config) get longer delays to avoid hammering Vault.
+// Transient errors (timeouts, 5xx) get standard delays.
+func classifyError(err error) time.Duration {
+	errStr := err.Error()
+
+	// Permanent misconfiguration errors - back off for longer to avoid hammering Vault.
+	if strings.Contains(errStr, "Code: 403") ||
+		strings.Contains(errStr, "Code: 404") ||
+		strings.Contains(errStr, "invalid mount") ||
+		strings.Contains(errStr, "already exists") ||
+		strings.Contains(errStr, "invalid auth method") {
+		return permanentErrorRequeueDelay
+	}
+
+	// Default to transient error handling
+	return transientErrorRequeueDelay
 }
